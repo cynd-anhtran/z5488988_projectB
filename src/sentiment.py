@@ -3,7 +3,7 @@
 Innovation: uses finVADER's extended finance lexicons (SentiBignomics +
 Henry word lists) merged into VADER's SentimentIntensityAnalyzer. This
 adds ~7,500 finance-specific sentiment terms that standard VADER misses
-(e.g. "bullish", "downgrade", "outperform", "restructuring").
+(e.g. "downgrade", "outperform", "restructuring").
 
 We call polarity_scores() once per headline (returns all 4 scores in one
 pass) and build the scorer once, making the 146K-headline corpus scorable

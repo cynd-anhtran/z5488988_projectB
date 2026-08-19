@@ -9,7 +9,7 @@ public GitHub repository; the app entrypoint is streamlit_app.py at the root.
 
 ## How to run
 
-    pip install -r requirements.txt -r requirements-dev.txt   # dev adds nltk (VADER)
+    pip install -r requirements.txt -r requirements-dev.txt   # reproducible pipeline + tests
     python scripts/run_part_b.py            # reproduces your results into results/
     streamlit run streamlit_app.py          # runs the app locally
 
@@ -28,7 +28,8 @@ results/ - those ARE committed.
 - context/            provided data guide and project context (do not edit)
 - report/             your report - see report/OUTLINE.md (author in Word, submit report.pdf)
 - ai/                 your prompt logs and AI notes
-- requirements-dev.txt build/repro-only deps (nltk); keep them out of the deployed app
+- requirements-dev.txt build/repro-only deps (finVADER, its compatible NLTK pin,
+  and pytest); keep them out of the deployed app
 - AGENTS.md / CLAUDE.md   replace the stub for your tool (you need just one) with your own
 
 ## Deploy + hand in

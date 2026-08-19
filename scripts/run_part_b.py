@@ -3,9 +3,10 @@
     python scripts/run_part_b.py
 
 Pipeline:
-  1. Load Part A derived data (combined_returns_panel, headline_panel)
-     OR download fresh via data_access if available
-  2. Build universes (equity, crypto, combined)
+  1. Load clean equity and crypto prices through data_access and reuse the
+     Part A headline panel when available
+  2. Compute Equity and Crypto returns on their native calendars, then build
+     Combined by aligning already-computed crypto returns to equity dates
   3. Run out-of-sample backtests (4 methods x 3 universes)
   4. Score headlines with finVADER, build sector sentiment index
   5. Apply sentiment fusion to equity fund
@@ -30,8 +31,8 @@ from src.sentiment import score_headlines, sector_sentiment_index
 from src.fusion import apply_sentiment, backtest_with_fusion
 from src.figures import (
     plot_growth_of_one, plot_drawdowns, plot_sharpe_comparison,
-    plot_weights_over_time, plot_sector_sentiment, plot_sector_sentiment_heatmap,
-    plot_fusion_comparison,
+    plot_weights_over_time, plot_weights_across_methods,
+    plot_sector_sentiment, plot_sector_sentiment_heatmap, plot_fusion_comparison,
 )
 
 # Output directories
@@ -44,58 +45,75 @@ for d in (DATA_DIR, TABLE_DIR, FIG_DIR):
 
 
 # ---------------------------------------------------------------------------
-# Data loading: prefer Part A derived CSVs, fall back to data_access
+# Data loading: compute each return panel on its native calendar
 # ---------------------------------------------------------------------------
 
-def _load_from_part_a():
-    """Load the combined returns panel and headline panel from Part A results."""
-    # Try several possible locations for Part A data
+def _find_part_a_headlines():
+    """Find the Part A headline panel, if it is available locally."""
     search_paths = [
         ROOT / "results" / "data",               # if Part A results copied into Part B
         ROOT.parent / "z5488988_projectA" / "results" / "data",  # sibling folder
         pathlib.Path("/mnt/user-data/uploads/z5488988_projectA/results/data"),  # staged
     ]
-    combined_csv = None
-    headline_csv = None
     for p in search_paths:
-        if (p / "combined_returns_panel.csv").exists():
-            combined_csv = p / "combined_returns_panel.csv"
         if (p / "headline_panel.csv").exists():
-            headline_csv = p / "headline_panel.csv"
-        if combined_csv and headline_csv:
-            break
-
-    if combined_csv is None or headline_csv is None:
-        return None, None
-    return combined_csv, headline_csv
+            return p / "headline_panel.csv"
+    return None
 
 
 def _load_from_data_access():
-    """Load fresh from data_access helper (needs network)."""
-    from src import data_access
+    """Build all return universes correctly from the provided price data."""
     from src.etl import load_clean_equities, load_clean_crypto, load_clean_news
     from src.features import (
-        daily_returns, combined_returns_panel, price_panel_wide,
-        assemble_headline_panel,
+        build_return_universes, assemble_headline_panel,
     )
 
     eq, _ = load_clean_equities()
     cr, _ = load_clean_crypto()
-    news, _ = load_clean_news()
+    universes = build_return_universes(eq, cr)
 
-    # Build combined returns panel
-    eq_px = price_panel_wide(eq)
-    cr_px = price_panel_wide(cr)
-    combined_px = pd.concat([eq_px, cr_px.reindex(eq_px.index)], axis=1)
-    combined_ret = combined_px.pct_change().dropna().dropna(axis=1, how="any")
-
-    # Build headline panel
-    headline_panel = assemble_headline_panel(news, eq)
+    headline_csv = _find_part_a_headlines()
+    if headline_csv is not None:
+        print(f"  Reusing Part A headline panel: {headline_csv}")
+        headline_panel = pd.read_csv(
+            headline_csv,
+            parse_dates=["trading_date", "original_date"],
+            dtype={"publisher": str},
+            low_memory=False,
+        )
+    else:
+        print("  Part A headline panel not found; rebuilding it from source data")
+        news, _ = load_clean_news()
+        headline_panel = assemble_headline_panel(news, eq)
 
     # Sector map
     sector_map = eq[["ticker", "sector"]].drop_duplicates().reset_index(drop=True)
 
-    return combined_ret, headline_panel, sector_map
+    return universes, headline_panel, sector_map
+
+
+def _turnover_metrics(audit: pd.DataFrame, strategy: str) -> dict:
+    """Summarise drift-adjusted traded notional for one strategy.
+
+    The first row is the initial purchase from cash.  Average rebalance
+    turnover excludes that initial construction so a constant-target strategy
+    such as 1/N still reports the trading caused by weight drift.
+    """
+    rows = audit[audit["strategy"] == strategy].sort_values("first_holding_date")
+    if rows.empty:
+        return {
+            "initial_turnover": np.nan,
+            "avg_rebalance_turnover": np.nan,
+            "total_turnover": np.nan,
+            "total_tx_cost": np.nan,
+        }
+    recurring = rows["turnover"].iloc[1:]
+    return {
+        "initial_turnover": float(rows["turnover"].iloc[0]),
+        "avg_rebalance_turnover": float(recurring.mean()) if len(recurring) else 0.0,
+        "total_turnover": float(rows["turnover"].sum()),
+        "total_tx_cost": float(rows["tx_cost"].sum()),
+    }
 
 
 def main():
@@ -108,37 +126,16 @@ def main():
     print("STAGE 1: Loading data...")
     print("=" * 60)
 
-    combined_csv, headline_csv = _load_from_part_a()
+    universes, headline_panel, sector_map = _load_from_data_access()
+    equity_ret = universes["Equity"]
+    crypto_ret = universes["Crypto"]
+    combined_ret = universes["Combined"]
 
-    if combined_csv is not None:
-        print(f"  Using Part A derived data:")
-        print(f"    {combined_csv}")
-        print(f"    {headline_csv}")
-
-        combined_ret = pd.read_csv(combined_csv, index_col=0, parse_dates=True)
-        headline_panel = pd.read_csv(
-            headline_csv,
-            parse_dates=["trading_date", "original_date"],
-            dtype={"publisher": str},
-            low_memory=False,
-        )
-
-        # Build sector map from headline panel
-        sector_map = (
-            headline_panel[["ticker", "sector"]]
-            .drop_duplicates()
-            .reset_index(drop=True)
-        )
-    else:
-        print("  Part A CSVs not found, downloading fresh data...")
-        combined_ret, headline_panel, sector_map = _load_from_data_access()
-
-    # Split into universes
-    eq_tickers = [c for c in combined_ret.columns if not c.endswith("-USD")]
-    cr_tickers = [c for c in combined_ret.columns if c.endswith("-USD")]
-
-    equity_ret = combined_ret[eq_tickers].dropna()
-    crypto_ret = combined_ret[cr_tickers].dropna()
+    crypto_weekend_days = int((crypto_ret.index.dayofweek >= 5).sum())
+    if crypto_weekend_days == 0:
+        raise RuntimeError("Crypto return panel lost its native weekend observations.")
+    if not combined_ret.index.equals(equity_ret.index):
+        raise RuntimeError("Combined return panel is not aligned to the equity calendar.")
 
     print(f"  Equity universe:   {equity_ret.shape[0]} days x {equity_ret.shape[1]} assets")
     print(f"  Crypto universe:   {crypto_ret.shape[0]} days x {crypto_ret.shape[1]} assets")
@@ -174,11 +171,13 @@ def main():
         all_oos[uni_name] = oos
         all_weights[uni_name] = weights
 
+        rebalance_count = audit["decision_month"].nunique()
         print(f"    OOS period: {oos.index.min():%Y-%m-%d} to {oos.index.max():%Y-%m-%d} "
-              f"({len(audit)} monthly rebalances)")
+              f"({rebalance_count} monthly rebalances)")
 
         for method in oos.columns:
             m = performance_metrics(oos[method], ann_days)
+            m.update(_turnover_metrics(audit, method))
             m["universe"] = uni_name
             m["method"] = method
             m["tx_cost_bps"] = 0
@@ -189,10 +188,12 @@ def main():
                   f"MaxDD {m['max_drawdown']*100:6.1f}%")
 
         # Run with transaction costs (innovation)
-        oos_tc, _, _ = run_oos_backtest(ret, WEIGHT_FUNCS, init_days=ann_days,
-                                         tx_cost_bps=TX_COST)
+        oos_tc, _, audit_tc = run_oos_backtest(
+            ret, WEIGHT_FUNCS, init_days=ann_days, tx_cost_bps=TX_COST
+        )
         for method in oos_tc.columns:
             m = performance_metrics(oos_tc[method], ann_days)
+            m.update(_turnover_metrics(audit_tc, method))
             m["universe"] = uni_name
             m["method"] = method
             m["tx_cost_bps"] = TX_COST
@@ -348,7 +349,16 @@ def main():
     plot_sharpe_comparison(base_metrics, FIG_DIR / "sharpe_comparison.png")
     print("  Saved sharpe_comparison.png")
 
-    # 4. Weights over time (Combined Min-Var as example)
+    # 4. Weights over time across all four Equity methods
+    plot_weights_across_methods(
+        all_weights["Equity"],
+        save_path=FIG_DIR / "weights_equity_methods.png",
+        universe="Equity",
+        top_n=6,
+    )
+    print("  Saved weights_equity_methods.png")
+
+    # 4b. Weights over time (Combined Min-Var as example)
     plot_weights_over_time(
         all_weights["Combined"]["Minimum-variance"],
         top_n=10,
@@ -358,7 +368,7 @@ def main():
     )
     print("  Saved weights_combined_minvar.png")
 
-    # 5. Weights over time (Equity Min-Var)
+    # 4c. Weights over time (Equity Min-Var)
     plot_weights_over_time(
         all_weights["Equity"]["Minimum-variance"],
         top_n=10,

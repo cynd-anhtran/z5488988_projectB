@@ -17,6 +17,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.portfolios import holding_period_returns
+
 
 def apply_sentiment(
     weights: pd.DataFrame,
@@ -119,10 +121,11 @@ def backtest_with_fusion(
         common = base_weights.columns.intersection(block.columns)
         bw = base_weights.loc[wdate, common].values
         tw = tilted_weights.loc[wdate, common].values
-        ret_block = block[common].values
 
-        base_rets.append(pd.Series(ret_block @ bw, index=block.index))
-        tilted_rets.append(pd.Series(ret_block @ tw, index=block.index))
+        base_period, _ = holding_period_returns(bw, block[common])
+        tilted_period, _ = holding_period_returns(tw, block[common])
+        base_rets.append(base_period)
+        tilted_rets.append(tilted_period)
 
     base_daily = pd.concat(base_rets) if base_rets else pd.Series(dtype=float)
     tilted_daily = pd.concat(tilted_rets) if tilted_rets else pd.Series(dtype=float)

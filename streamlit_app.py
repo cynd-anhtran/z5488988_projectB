@@ -1454,19 +1454,42 @@ elif page == "Funds":
         (metrics["universe"] == selected_universe) &
         (metrics["method"].isin(base_methods))
     ].copy()
-    tc_0 = tc_data[tc_data["tx_cost_bps"] == 0][["method", "sharpe"]].rename(
-        columns={"sharpe": "Sharpe (0 bps)"})
-    tc_10 = tc_data[tc_data["tx_cost_bps"] == 10][["method", "sharpe"]].rename(
-        columns={"sharpe": "Sharpe (10 bps)"})
+    tc_0 = tc_data[tc_data["tx_cost_bps"] == 0][
+        ["method", "ann_return", "sharpe"]
+    ].rename(columns={
+        "ann_return": "Annual return (0 bps)",
+        "sharpe": "Sharpe (0 bps)",
+    })
+    tc_10_cols = ["method", "ann_return", "sharpe"]
+    if "avg_rebalance_turnover" in tc_data.columns:
+        tc_10_cols.append("avg_rebalance_turnover")
+    tc_10 = tc_data[tc_data["tx_cost_bps"] == 10][tc_10_cols].rename(
+        columns={
+            "ann_return": "Annual return (10 bps)",
+            "sharpe": "Sharpe (10 bps)",
+            "avg_rebalance_turnover": "Average monthly turnover",
+        })
     if not tc_0.empty and not tc_10.empty:
         tc_compare = tc_0.merge(tc_10, on="method")
-        tc_compare["Impact"] = tc_compare.apply(
-            lambda r: f"{r['Sharpe (10 bps)'] - r['Sharpe (0 bps)']:+.3f}", axis=1)
+        tc_compare["Return drag"] = (
+            tc_compare["Annual return (0 bps)"]
+            - tc_compare["Annual return (10 bps)"]
+        )
         tc_compare = tc_compare.rename(columns={"method": "Strategy"})
+        for col in ["Annual return (0 bps)", "Annual return (10 bps)"]:
+            tc_compare[col] = tc_compare[col].map(lambda x: f"{x * 100:.2f}%")
+        tc_compare["Return drag"] = tc_compare["Return drag"].map(
+            lambda x: f"{x * 100:.2f} pp")
+        if "Average monthly turnover" in tc_compare.columns:
+            tc_compare["Average monthly turnover"] = tc_compare[
+                "Average monthly turnover"
+            ].map(lambda x: f"{x * 100:.2f}%")
         with st.expander("Transaction Cost Impact (10 bps one-way)"):
             st.markdown(
-                '<div class="section-subtitle">Sharpe ratio change after deducting '
-                '10 bps per unit of turnover at each monthly rebalance.</div>',
+                '<div class="section-subtitle">Weights drift with realised returns '
+                'before each monthly rebalance. Costs are 10 bps per dollar traded '
+                'and include the initial portfolio purchase. Annual-return drag is '
+                'shown at two-decimal precision so small but real effects remain visible.</div>',
                 unsafe_allow_html=True)
             st.markdown(
                 styled_html_table(tc_compare.reset_index(drop=True),
@@ -1488,17 +1511,34 @@ elif page == "Funds":
         holdings_method = st.selectbox("Strategy", selected_methods,
                                        key="holdings_strategy")
 
-    fw_sel = fund_weights[
+    fw_all = fund_weights[
         (fund_weights["universe"] == selected_universe) &
-        (fund_weights["method"] == holdings_method) &
-        (fund_weights["weight"] > 0.001)
+        (fund_weights["method"] == holdings_method)
     ]
+    fw_sel = fw_all[fw_all["weight"] > 0.001]
 
     if not fw_sel.empty:
         latest_date = fw_sel["date"].max()
         latest = fw_sel[fw_sel["date"] == latest_date].sort_values("weight", ascending=False)
         n_pos = len(latest)
         st.caption(f"As of {latest_date.strftime('%Y-%m-%d')} · {n_pos} positions")
+
+        if selected_universe == "Combined":
+            latest_all = fw_all[fw_all["date"] == latest_date]
+            crypto_share = latest_all.loc[
+                latest_all["ticker"].str.endswith("-USD"), "weight"
+            ].sum()
+            equity_share = latest_all["weight"].sum() - crypto_share
+            exp1, exp2 = st.columns(2)
+            exp1.metric("Equity allocation", f"{equity_share * 100:.2f}%")
+            exp2.metric("Crypto allocation", f"{crypto_share * 100:.2f}%")
+            if crypto_share < 0.001:
+                st.info(
+                    "This is an optimiser outcome, not a missing-data error. Under "
+                    "long-only unconstrained minimum variance, the crypto assets do "
+                    "not reduce estimated portfolio variance enough to receive a "
+                    "positive allocation in this window."
+                )
 
         col_chart, col_table = st.columns([1.3, 1])
         with col_chart:
@@ -1680,12 +1720,16 @@ elif page == "Funds":
     ].sort_values("date").set_index("date")
 
     if not fr_a.empty and not fr_b.empty:
-        # Align dates
-        common_idx = fr_a.index.intersection(fr_b.index)
-        ga = fr_a.loc[common_idx, "growth_of_1"]
-        gb = fr_b.loc[common_idx, "growth_of_1"]
-        ra = fr_a.loc[common_idx, "daily_return"]
-        rb = fr_b.loc[common_idx, "daily_return"]
+        # Preserve each fund's native calendar for wealth/drawdown. Align only
+        # the return pair used for correlation, where common dates are required.
+        ga = fr_a["growth_of_1"]
+        gb = fr_b["growth_of_1"]
+        aligned_returns = pd.concat([
+            fr_a["daily_return"].rename("Fund A"),
+            fr_b["daily_return"].rename("Fund B"),
+        ], axis=1, join="inner", sort=False).dropna()
+        ra = aligned_returns["Fund A"]
+        rb = aligned_returns["Fund B"]
 
         comp_chart1, comp_chart2 = st.columns(2)
         with comp_chart1:
@@ -1727,39 +1771,42 @@ elif page == "Funds":
             st.markdown('</div>', unsafe_allow_html=True)
 
         # Head-to-head metrics
-        def _quick_metrics(ret_series, label):
-            r = ret_series.dropna()
-            n = len(r)
-            total = float((1 + r).prod() - 1)
-            ann_ret = float((1 + total) ** (252 / max(n, 1)) - 1)
-            ann_vol = float(r.std() * np.sqrt(252))
-            sharpe_v = float(r.mean() / r.std() * np.sqrt(252)) if r.std() > 0 else 0
-            wealth = (1 + r).cumprod()
-            max_dd = float((wealth / wealth.cummax() - 1).min())
+        def _official_fund_metrics(universe, method, label):
+            row = metrics[
+                (metrics["universe"] == universe)
+                & (metrics["method"] == method)
+                & (metrics["tx_cost_bps"] == 0)
+            ]
+            if row.empty:
+                return None, None
+            row = row.iloc[0]
             return {
                 "Fund": label,
-                "Ann. Return": f"{ann_ret*100:.1f}%",
-                "Ann. Vol": f"{ann_vol*100:.1f}%",
-                "Sharpe": f"{sharpe_v:.2f}",
-                "Max DD": f"{max_dd*100:.1f}%",
-                "Total Return": f"{total*100:.1f}%",
-            }
+                "Ann. Return": f"{row['ann_return']*100:.1f}%",
+                "Ann. Vol": f"{row['ann_vol']*100:.1f}%",
+                "Sharpe": f"{row['sharpe']:.2f}",
+                "Max DD": f"{row['max_drawdown']*100:.1f}%",
+                "Total Return": f"{row['total_return']*100:.1f}%",
+            }, row
 
-        comp_table = pd.DataFrame([
-            _quick_metrics(ra, fund_a),
-            _quick_metrics(rb, fund_b),
-        ])
+        metrics_a, row_a = _official_fund_metrics(uni_a, meth_a, fund_a)
+        metrics_b, row_b = _official_fund_metrics(uni_b, meth_b, fund_b)
+        comp_table = pd.DataFrame([x for x in [metrics_a, metrics_b] if x is not None])
         st.markdown(
             styled_html_table(comp_table.reset_index(drop=True),
                               highlight_col="Sharpe", highlight_max=True),
             unsafe_allow_html=True)
+        st.caption(
+            "Growth, drawdown and scorecard metrics retain each fund's native "
+            "calendar and annualisation convention. Correlation uses common dates only."
+        )
 
         # --- Smart commentary ---
         corr_ab = float(ra.corr(rb))
-        sharpe_a = float(ra.mean() / ra.std() * np.sqrt(252)) if ra.std() > 0 else 0
-        sharpe_b = float(rb.mean() / rb.std() * np.sqrt(252)) if rb.std() > 0 else 0
-        vol_a = float(ra.std() * np.sqrt(252))
-        vol_b = float(rb.std() * np.sqrt(252))
+        sharpe_a = float(row_a["sharpe"])
+        sharpe_b = float(row_b["sharpe"])
+        vol_a = float(row_a["ann_vol"])
+        vol_b = float(row_b["ann_vol"])
         winner = fund_a if sharpe_a >= sharpe_b else fund_b
         loser = fund_b if sharpe_a >= sharpe_b else fund_a
 
@@ -1854,7 +1901,7 @@ elif page == "Funds":
     if not fus.empty:
         fr_wide_parts.append(fus.rename("Eq:Fusion"))
 
-    fr_wide = pd.concat(fr_wide_parts, axis=1).dropna()
+    fr_wide = pd.concat(fr_wide_parts, axis=1, sort=False).dropna()
 
     if not fr_wide.empty:
         min_date = fr_wide.index.min().to_pydatetime()

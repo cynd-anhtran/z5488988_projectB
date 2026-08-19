@@ -116,8 +116,10 @@ Conventions:
    - sector_sentiment_index.csv: ~9,832 rows (10 sectors x ~983 trading days)
    - performance_metrics.csv: 26 rows (methods x universes x cost scenarios)
 3. Verify no look-ahead: the OOS period must start after init_days of training.
-   Equity first live date should be ~2021-01-04 (after 252 training days from
-   2020-01-02). Crypto first live date ~2021-07-01 (after 365 days).
+   Equity first live date should be ~2021-01-04 (after 252 trading-day
+   observations from 2020-01-02). Crypto first live date should be
+   ~2021-01-01 (after 365 calendar-day observations on its seven-day market
+   calendar).
 4. Confirm sentiment lag: `sentiment_lagged` column should have exactly 10 NaN
    values (one per sector — the first observation in each group after shift(1)).
 5. Confirm weights sum to 1.0 for every (universe, method, date) combination.

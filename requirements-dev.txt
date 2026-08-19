@@ -3,4 +3,9 @@
 #     pip install -r requirements.txt -r requirements-dev.txt
 # Keep these OUT of the deployed app so Streamlit cold starts stay fast - the app
 # should load precomputed artifacts from results/, not score sentiment at runtime.
-nltk>=3.8
+# finvader 1.0.2 declares an exact NLTK dependency; keep the compatible pin so
+# a clean pip install resolves deterministically instead of backtracking/failing.
+nltk==3.6.2
+vaderSentiment>=3.3.2,<4
+finvader==1.0.2
+pytest>=8,<9

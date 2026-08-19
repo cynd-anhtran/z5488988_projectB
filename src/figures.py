@@ -6,6 +6,11 @@ Uses the Quantise teal/cyan design system (white background).
 from __future__ import annotations
 
 from pathlib import Path
+import matplotlib
+
+# Use a non-interactive backend so the reproducible pipeline works on headless
+# machines and Streamlit/CI environments as well as a local desktop.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as mticker
@@ -187,7 +192,7 @@ def plot_sharpe_comparison(
 
     _q_header(fig, "Sharpe ratio comparison across funds and methods",
                "Long-only, out-of-sample, monthly rebalance, rf = 0",
-               "Source: project data bundle | annualised with sqrt(periods_per_year)")
+               "Source: project data bundle | OOS; Equity/Combined √252, Crypto √365; rf = 0")
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
     _reset()
@@ -235,6 +240,99 @@ def plot_weights_over_time(
     _reset()
 
 
+def plot_weights_across_methods(
+    weights_by_method: dict[str, pd.DataFrame],
+    save_path: Path,
+    universe: str = "Equity",
+    top_n: int = 6,
+):
+    """Compare monthly target weights across methods for one fund family.
+
+    Each panel shows the top ``top_n`` assets by average target weight for that
+    method, with all remaining assets combined as Other.  This keeps the
+    cross-method exhibit readable without hiding total portfolio weight.
+    """
+    _q_style()
+    methods = list(weights_by_method)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8.5), sharex=True, sharey=True)
+    axes = axes.flatten()
+    cmap = plt.cm.tab20
+
+    for ax, method in zip(axes, methods):
+        weights = weights_by_method[method].sort_index()
+        average = weights.mean().sort_values(ascending=False)
+        top_tickers = average.head(top_n).index.tolist()
+        plot_data = weights[top_tickers].copy()
+        other = weights.drop(columns=top_tickers, errors="ignore").sum(axis=1)
+        if float(other.max()) > 1e-12:
+            plot_data["Other"] = other
+
+        colors = [
+            cmap(i / max(len(plot_data.columns) - 1, 1))
+            for i in range(len(plot_data.columns))
+        ]
+        ax.stackplot(
+            plot_data.index,
+            plot_data.T.values,
+            labels=plot_data.columns,
+            colors=colors,
+            alpha=0.88,
+        )
+        effective_n = (1.0 / weights.pow(2).sum(axis=1)).mean()
+        ax.set_title(method, fontsize=11, fontweight="bold")
+        ax.text(
+            0.99,
+            0.96,
+            f"Mean effective holdings: {effective_n:.1f}",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontsize=7.5,
+            color=Q_GREY,
+        )
+        ax.set_ylim(0, 1)
+        ax.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+        ax.legend(
+            fontsize=6.5,
+            frameon=False,
+            ncol=4,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.13),
+        )
+
+    for ax in axes[::2]:
+        ax.set_ylabel("Target weight")
+
+    fig.text(
+        0.012,
+        0.965,
+        f"{universe} fund — monthly target weights across methods",
+        fontsize=15,
+        fontweight="bold",
+        color=Q_DARK_TXT,
+    )
+    fig.text(
+        0.012,
+        0.925,
+        f"Top {top_n} assets by average weight in each panel; remaining assets grouped as Other",
+        fontsize=11,
+        color=Q_GREY,
+    )
+    fig.text(
+        0.012,
+        0.012,
+        "Source: project data bundle | out-of-sample, long-only, monthly target weights",
+        fontsize=8,
+        color=Q_GREY,
+    )
+    fig.tight_layout(rect=[0, 0.045, 1, 0.89], h_pad=2.4, w_pad=1.2)
+    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    _reset()
+
+
 # ---------------------------------------------------------------------------
 # Sentiment figures
 # ---------------------------------------------------------------------------
@@ -243,40 +341,41 @@ def plot_sector_sentiment(
     sector_idx: pd.DataFrame,
     save_path: Path,
 ):
-    """Time series of sector sentiment index (fear & greed scale)."""
+    """Compact time series of all sector indices on the Fear & Greed scale."""
     _q_style()
-    sectors = sector_idx["sector"].unique()
-    n_sectors = len(sectors)
-    ncols = 2
-    nrows = (n_sectors + 1) // ncols
+    sectors = sorted(sector_idx["sector"].unique())
+    fig, ax = plt.subplots(figsize=(14, 5.5))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(sectors)))
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 3 * nrows), sharex=True)
-    axes = axes.flatten()
-
-    colors = plt.cm.tab10(np.linspace(0, 1, n_sectors))
-
-    for i, sector in enumerate(sorted(sectors)):
-        ax = axes[i]
+    for color, sector in zip(colors, sectors):
         data = sector_idx[sector_idx["sector"] == sector].sort_values("date")
         # Rolling 21-day average for readability
         smoothed = data["fear_greed"].rolling(21, min_periods=1).mean()
-        ax.plot(data["date"].values, smoothed.values, color=colors[i], lw=1.2)
-        ax.axhline(50, color=Q_GREY, lw=0.6, ls="--")
-        ax.set_title(sector, fontsize=9, fontweight="bold")
-        ax.set_ylim(30, 70)
-        ax.set_ylabel("F&G", fontsize=8)
-        ax.xaxis.set_major_locator(mdates.YearLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-        ax.tick_params(axis="x", rotation=0, labelsize=8)
+        ax.plot(
+            data["date"].values,
+            smoothed.values,
+            color=color,
+            lw=1.35,
+            label=sector,
+        )
 
-    # Hide unused axes
-    for j in range(n_sectors, len(axes)):
-        axes[j].set_visible(False)
+    ax.axhline(50, color=Q_GREY, lw=0.8, ls="--")
+    ax.set_ylim(42, 70)
+    ax.set_ylabel("Fear & Greed score")
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    ax.legend(
+        fontsize=8,
+        frameon=False,
+        ncol=5,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.13),
+    )
 
     _q_header(fig, "Sector sentiment index — Fear & Greed (0–100)",
                "finVADER compound score, equal-weight across tickers, 21-day rolling mean",
                "Source: project news headlines | 0 = extreme fear, 50 = neutral, 100 = extreme greed")
-    fig.tight_layout(rect=[0, 0.04, 1, 0.86])
+    fig.tight_layout(rect=[0, 0.08, 1, 0.86])
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
     _reset()

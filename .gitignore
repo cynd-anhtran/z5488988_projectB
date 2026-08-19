@@ -19,3 +19,10 @@ results/data/headline_panel.csv
 # Secrets / local
 .streamlit/secrets.toml
 .env
+
+# Local OS, editor, test, and submission artifacts
+.DS_Store
+.pytest_cache/
+.idea/workspace.xml
+~$*.docx
+*.zip

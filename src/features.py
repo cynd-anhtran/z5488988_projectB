@@ -28,6 +28,23 @@ def daily_returns(prices: pd.DataFrame, price_col: str = "adjClose") -> pd.DataF
     return result.reset_index(drop=True)
 
 
+def returns_panel_wide(
+    prices: pd.DataFrame,
+    price_col: str = "adjClose",
+) -> pd.DataFrame:
+    """Compute returns on the source calendar and pivot to date x ticker.
+
+    This helper deliberately calculates returns *before* any cross-asset-class
+    calendar alignment.  In particular, crypto weekend observations remain in
+    the standalone crypto panel.
+    """
+    returns = daily_returns(prices, price_col=price_col)
+    panel = returns.pivot(index="date", columns="ticker", values="return")
+    panel.index = pd.DatetimeIndex(panel.index)
+    panel.index.name = "date"
+    return panel.sort_index()
+
+
 def combined_returns_panel(
     eq_prices: pd.DataFrame,
     cr_prices: pd.DataFrame,
@@ -40,16 +57,44 @@ def combined_returns_panel(
 
     Returns wide DataFrame: index=date, columns=all tickers.
     """
-    eq_ret = daily_returns(eq_prices)
-    cr_ret = daily_returns(cr_prices)
-
-    eq_wide = eq_ret.pivot(index="date", columns="ticker", values="return")
-    cr_wide = cr_ret.pivot(index="date", columns="ticker", values="return")
-
+    eq_wide = returns_panel_wide(eq_prices)
+    cr_wide = returns_panel_wide(cr_prices)
     combined = eq_wide.join(cr_wide, how="left")
     combined.index.name = "date"
     combined = combined.sort_index()
     return combined
+
+
+def build_return_universes(
+    eq_prices: pd.DataFrame,
+    cr_prices: pd.DataFrame,
+) -> dict[str, pd.DataFrame]:
+    """Build clean Equity, Crypto and Combined return universes.
+
+    Equity and Crypto retain their native calendars.  Combined uses the equity
+    trading calendar, but its crypto returns have already been calculated from
+    consecutive crypto calendar days.  This prevents Friday-to-Monday price
+    changes from being manufactured by differencing price levels after a merge.
+    """
+    equity = returns_panel_wide(eq_prices).dropna(how="any")
+    crypto = returns_panel_wide(cr_prices).dropna(how="any")
+    combined = equity.join(crypto, how="left")
+
+    missing_crypto = int(combined[crypto.columns].isna().sum().sum())
+    if missing_crypto:
+        raise ValueError(
+            "Combined panel has missing crypto returns on equity trading dates "
+            f"({missing_crypto} cells); inspect the native crypto calendar."
+        )
+
+    if not equity.index.equals(combined.index):
+        raise ValueError("Combined return panel must retain the equity calendar exactly.")
+
+    return {
+        "Equity": equity,
+        "Crypto": crypto,
+        "Combined": combined,
+    }
 
 
 def price_panel_wide(prices: pd.DataFrame, price_col: str = "adjClose") -> pd.DataFrame:
