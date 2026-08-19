@@ -270,25 +270,40 @@ st.markdown("""
         padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px;
     }
 
-    /* Sidebar — broad selectors for Streamlit Cloud compatibility */
+    /* Sidebar — nuclear selectors for Streamlit Cloud compatibility */
     [data-testid="stSidebar"],
-    section[data-testid="stSidebar"],
     [data-testid="stSidebar"] > div,
-    [data-testid="stSidebar"] > div > div {
+    [data-testid="stSidebar"] > div > div,
+    [data-testid="stSidebar"] > div > div > div,
+    [data-testid="stSidebar"] div[data-testid="stSidebarContent"],
+    [data-testid="stSidebar"] div[data-testid="stSidebarUserContent"],
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"],
+    [data-testid="stSidebar"] .block-container,
+    [data-testid="stSidebar"] section,
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarUserContent"] {
         background: linear-gradient(180deg, #1E2B1E 0%, #0D1F0D 100%) !important;
         background-color: #1E2B1E !important;
+    }
+    [data-testid="stSidebar"] div {
+        background-color: transparent !important;
+    }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1E2B1E 0%, #0D1F0D 100%) !important;
     }
     [data-testid="stSidebar"] * { color: #E5E7EB !important; }
     [data-testid="stSidebar"] .stRadio label {
         border-radius: 8px; padding: 6px 10px; transition: background 0.2s;
     }
     [data-testid="stSidebar"] .stRadio label:hover {
-        background: rgba(78, 228, 192, 0.12);
+        background: rgba(78, 228, 192, 0.12) !important;
     }
     [data-testid="stSidebar"] hr {
         border-color: rgba(255,255,255,0.12) !important;
     }
-    [data-testid="stSidebarNav"] {
+    [data-testid="stSidebarNav"],
+    [data-testid="stSidebarNavItems"],
+    [data-testid="stSidebarNavSeparator"] {
         background: transparent !important;
     }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
