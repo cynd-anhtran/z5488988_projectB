@@ -270,16 +270,29 @@ st.markdown("""
         padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px;
     }
 
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1E2B1E 0%, #0D1F0D 100%);
+    /* Sidebar — broad selectors for Streamlit Cloud compatibility */
+    [data-testid="stSidebar"],
+    section[data-testid="stSidebar"],
+    [data-testid="stSidebar"] > div,
+    [data-testid="stSidebar"] > div > div {
+        background: linear-gradient(180deg, #1E2B1E 0%, #0D1F0D 100%) !important;
+        background-color: #1E2B1E !important;
     }
-    section[data-testid="stSidebar"] * { color: #E5E7EB !important; }
-    section[data-testid="stSidebar"] .stRadio label {
+    [data-testid="stSidebar"] * { color: #E5E7EB !important; }
+    [data-testid="stSidebar"] .stRadio label {
         border-radius: 8px; padding: 6px 10px; transition: background 0.2s;
     }
-    section[data-testid="stSidebar"] .stRadio label:hover {
+    [data-testid="stSidebar"] .stRadio label:hover {
         background: rgba(78, 228, 192, 0.12);
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,0.12) !important;
+    }
+    [data-testid="stSidebarNav"] {
+        background: transparent !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #E5E7EB !important;
     }
 
     /* Typography */
@@ -355,6 +368,25 @@ st.markdown("""
 
     .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     div[data-testid="stAlert"] { border-radius: 10px; }
+
+    /* Streamlit Cloud toolbar & decoration bar */
+    [data-testid="stDecoration"] {
+        background-image: linear-gradient(90deg, #1E2B1E, #4ABEB2) !important;
+    }
+    [data-testid="stHeader"],
+    header[data-testid="stHeader"] {
+        background-color: rgba(255,255,255,0.95) !important;
+        backdrop-filter: blur(8px);
+    }
+    /* Streamlit Cloud deploy button bar */
+    [data-testid="stToolbar"] {
+        right: 2rem !important;
+    }
+    /* Multi-page nav inside sidebar */
+    [data-testid="stSidebarNavItems"],
+    [data-testid="stSidebarNavSeparator"] {
+        background: transparent !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
