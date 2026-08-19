@@ -30,7 +30,8 @@ from src.sentiment import score_headlines, sector_sentiment_index
 from src.fusion import apply_sentiment, backtest_with_fusion
 from src.figures import (
     plot_growth_of_one, plot_drawdowns, plot_sharpe_comparison,
-    plot_weights_over_time, plot_sector_sentiment, plot_fusion_comparison,
+    plot_weights_over_time, plot_sector_sentiment, plot_sector_sentiment_heatmap,
+    plot_fusion_comparison,
 )
 
 # Output directories
@@ -370,6 +371,10 @@ def main():
     # 6. Sector sentiment index
     plot_sector_sentiment(sector_idx, FIG_DIR / "sector_sentiment.png")
     print("  Saved sector_sentiment.png")
+
+    # 6b. Sector sentiment heatmap (compact alternative)
+    plot_sector_sentiment_heatmap(sector_idx, FIG_DIR / "sector_sentiment_heatmap.png")
+    print("  Saved sector_sentiment_heatmap.png")
 
     # 7. Fusion comparison
     plot_fusion_comparison(
