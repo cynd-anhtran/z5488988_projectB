@@ -159,6 +159,96 @@ def sector_dot(sector: str) -> str:
             f'<span style="vertical-align:middle;">{sector}</span>')
 
 
+# ---------------------------------------------------------------------------
+# Styled HTML table builder
+# ---------------------------------------------------------------------------
+def styled_html_table(df, highlight_col=None, highlight_max=True,
+                      universe_col=None, sector_col=None, pct_cols=None,
+                      fmt2_cols=None):
+    """Render a professional HTML table with colour-coded rows and badges.
+
+    Parameters
+    ----------
+    df : DataFrame to render (already formatted strings where needed)
+    highlight_col : column name to highlight best value row
+    highlight_max : True = highest is best, False = lowest
+    universe_col : column containing universe names for badge rendering
+    sector_col : column containing sector names for dot rendering
+    pct_cols : list of columns already formatted as percentages (no extra fmt)
+    fmt2_cols : list of columns to format to 2 decimal places
+    """
+    pct_cols = pct_cols or []
+    fmt2_cols = fmt2_cols or []
+
+    # Find best row index
+    best_idx = None
+    if highlight_col and highlight_col in df.columns:
+        try:
+            vals = pd.to_numeric(df[highlight_col], errors="coerce")
+            best_idx = vals.idxmax() if highlight_max else vals.idxmin()
+        except Exception:
+            pass
+
+    # Build HTML
+    header_cells = "".join(
+        f'<th style="padding:10px 14px;text-align:left;font-size:0.73rem;'
+        f'font-weight:700;text-transform:uppercase;letter-spacing:0.05em;'
+        f'color:{GREY_500};border-bottom:2px solid {TEAL};'
+        f'background:{WHITE};">{col}</th>'
+        for col in df.columns
+    )
+
+    rows_html = ""
+    for idx, row in df.iterrows():
+        is_best = (idx == best_idx) if best_idx is not None else False
+        row_bg = CYAN_PALE if is_best else WHITE
+        border_left = f"3px solid {TEAL}" if is_best else "3px solid transparent"
+        row_weight = "600" if is_best else "400"
+
+        cells = ""
+        for col in df.columns:
+            val = row[col]
+            cell_style = (
+                f'padding:10px 14px;font-size:0.82rem;color:{GREY_900};'
+                f'font-weight:{row_weight};border-bottom:1px solid {GREY_200};'
+                f'white-space:nowrap;'
+            )
+
+            # Render universe badge
+            if universe_col and col == universe_col and val in UNIVERSE_COLORS:
+                cell_content = universe_badge(val)
+            # Render sector dot
+            elif sector_col and col == sector_col and val in SECTOR_COLORS:
+                cell_content = sector_dot(val)
+            # Format numeric
+            elif col in fmt2_cols:
+                try:
+                    cell_content = f"{float(val):.2f}"
+                except (ValueError, TypeError):
+                    cell_content = str(val)
+            else:
+                cell_content = str(val)
+
+            cells += f'<td style="{cell_style}">{cell_content}</td>'
+
+        rows_html += (
+            f'<tr style="background:{row_bg};border-left:{border_left};'
+            f'transition:background 0.15s;"'
+            f' onmouseover="this.style.background=\'#F0FDFA\'"'
+            f' onmouseout="this.style.background=\'{row_bg}\'"'
+            f'>{cells}</tr>'
+        )
+
+    return (
+        f'<div style="overflow-x:auto;border-radius:10px;'
+        f'border:1px solid {GREY_200};margin-bottom:1rem;">'
+        f'<table style="width:100%;border-collapse:collapse;'
+        f'font-family:Inter,-apple-system,sans-serif;">'
+        f'<thead><tr>{header_cells}</tr></thead>'
+        f'<tbody>{rows_html}</tbody></table></div>'
+    )
+
+
 # =========================================================================
 # PAGE CONFIG
 # =========================================================================
@@ -170,17 +260,26 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Global CSS
+# Global CSS — aggressive white background + polished typography
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+    /* Force true white everywhere */
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         color: #111827;
     }
-    .main { background-color: #FFFFFF; }
+    .main,
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stAppViewBlockContainer"],
+    [data-testid="stVerticalBlock"],
+    [data-testid="stMain"],
+    .block-container {
+        background-color: #FFFFFF !important;
+    }
     .main .block-container {
         padding-top: 1rem;
         padding-bottom: 2rem;
@@ -213,7 +312,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Section label */
+    /* Section label + subtitle */
     .section-label {
         font-size: 0.68rem;
         font-weight: 700;
@@ -226,7 +325,13 @@ st.markdown("""
         font-size: 1.15rem;
         font-weight: 700;
         color: #111827;
-        margin-bottom: 12px;
+        margin-bottom: 2px;
+    }
+    .section-subtitle {
+        font-size: 0.82rem;
+        color: #6B7280;
+        margin-bottom: 14px;
+        line-height: 1.5;
     }
 
     /* Metric cards */
@@ -255,11 +360,6 @@ st.markdown("""
 
     /* DataFrames — cleaner */
     .stDataFrame { border-radius: 10px; overflow: hidden; }
-
-    /* Tabs / radio pill */
-    div[data-testid="stHorizontalBlock"] .stRadio > div {
-        gap: 4px;
-    }
 
     /* Expander */
     .streamlit-expanderHeader {
@@ -345,6 +445,12 @@ st.markdown("""
 
     /* Info box */
     div[data-testid="stAlert"] { border-radius: 10px; }
+
+    /* Force white bg on selectbox/multiselect dropdowns */
+    [data-testid="stSelectbox"],
+    [data-testid="stMultiSelect"] {
+        background-color: #FFFFFF !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -473,9 +579,12 @@ if page == "Funds":
     st.markdown("---")
 
     # --- Charts side-by-side ---
-    st.markdown('<div class="section-label">Performance</div>'
-                '<div class="section-title">Growth of $1 & Drawdowns</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label">Performance</div>'
+        '<div class="section-title">Growth of $1 & Drawdowns</div>'
+        '<div class="section-subtitle">Track cumulative out-of-sample performance '
+        'and peak-to-trough drawdowns across selected strategies.</div>',
+        unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
 
@@ -520,10 +629,13 @@ if page == "Funds":
 
     st.markdown("---")
 
-    # --- Performance table with coloured universe/method tags ---
-    st.markdown('<div class="section-label">Metrics</div>'
-                '<div class="section-title">Performance Scorecard</div>',
-                unsafe_allow_html=True)
+    # --- Performance table with styled HTML ---
+    st.markdown(
+        '<div class="section-label">Metrics</div>'
+        '<div class="section-title">Performance Scorecard</div>'
+        '<div class="section-subtitle">Compare risk-adjusted returns, drawdowns, '
+        'and tail-risk metrics. The best Sharpe row is highlighted in teal.</div>',
+        unsafe_allow_html=True)
 
     sel_base = metrics[
         (metrics["universe"] == selected_universe) &
@@ -532,38 +644,22 @@ if page == "Funds":
     ].copy()
 
     if not sel_base.empty:
-        display_cols = {
-            "method": "Strategy",
-            "ann_return": "Ann. Return",
-            "ann_vol": "Ann. Vol",
-            "sharpe": "Sharpe",
-            "sortino": "Sortino",
-            "max_drawdown": "Max DD",
-            "var_95": "VaR 95%",
-            "es_95": "ES 95%",
-            "total_return": "Total Return",
-        }
-        show = sel_base[list(display_cols.keys())].rename(columns=display_cols).reset_index(drop=True)
+        show = sel_base[["method", "ann_return", "ann_vol", "sharpe", "sortino",
+                         "max_drawdown", "var_95", "es_95", "total_return"]].copy()
+        show.columns = ["Strategy", "Ann. Return", "Ann. Vol", "Sharpe", "Sortino",
+                        "Max DD", "VaR 95%", "ES 95%", "Total Return"]
+        show = show.reset_index(drop=True)
+
+        # Format percentages
         for col in ["Ann. Return", "Ann. Vol", "Max DD", "Total Return"]:
             show[col] = show[col].apply(lambda x: f"{x*100:.1f}%")
         for col in ["VaR 95%", "ES 95%"]:
             show[col] = show[col].apply(lambda x: f"{x*100:.2f}%")
 
-        # Highlight best Sharpe row
-        def highlight_best(row):
-            try:
-                sharpe_val = float(row["Sharpe"])
-                max_sharpe = sel_base["sharpe"].max()
-                if abs(sharpe_val - max_sharpe) < 0.001:
-                    return ["background-color: #F1FAF8; font-weight: 600"] * len(row)
-            except (ValueError, TypeError):
-                pass
-            return [""] * len(row)
-
-        styled = show.style.apply(highlight_best, axis=1).format(
-            {"Sharpe": "{:.2f}", "Sortino": "{:.2f}"}, na_rep="—"
-        )
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.markdown(
+            styled_html_table(show, highlight_col="Sharpe", highlight_max=True,
+                              fmt2_cols=["Sharpe", "Sortino"]),
+            unsafe_allow_html=True)
 
     # --- TX cost expander ---
     tc_data = metrics[
@@ -581,15 +677,24 @@ if page == "Funds":
             lambda r: f"{r['Sharpe (10 bps)'] - r['Sharpe (0 bps)']:+.3f}", axis=1)
         tc_compare = tc_compare.rename(columns={"method": "Strategy"})
         with st.expander("Transaction Cost Impact (10 bps one-way)"):
-            st.dataframe(tc_compare, use_container_width=True, hide_index=True)
-            st.caption("Sharpe change after deducting 10 bps per unit of turnover at each monthly rebalance.")
+            st.markdown(
+                '<div class="section-subtitle">Sharpe ratio change after deducting '
+                '10 bps per unit of turnover at each monthly rebalance.</div>',
+                unsafe_allow_html=True)
+            st.markdown(
+                styled_html_table(tc_compare.reset_index(drop=True),
+                                  fmt2_cols=["Sharpe (0 bps)", "Sharpe (10 bps)"]),
+                unsafe_allow_html=True)
 
     st.markdown("---")
 
     # --- Holdings ---
-    st.markdown('<div class="section-label">Composition</div>'
-                '<div class="section-title">Current Holdings</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label">Composition</div>'
+        '<div class="section-title">Current Holdings</div>'
+        '<div class="section-subtitle">View the latest portfolio weights for the selected '
+        'strategy. Top 15 positions are shown in the chart; full list in the table.</div>',
+        unsafe_allow_html=True)
 
     hold_c1, hold_c2 = st.columns([1, 2])
     with hold_c1:
@@ -625,18 +730,22 @@ if page == "Funds":
             plt.close()
 
         with col_table:
-            disp = latest[["ticker", "weight"]].copy()
+            disp = latest[["ticker", "weight"]].copy().reset_index(drop=True)
             disp["weight"] = disp["weight"].apply(lambda x: f"{x*100:.2f}%")
-            disp = disp.rename(columns={"ticker": "Ticker", "weight": "Weight"})
-            st.dataframe(disp, use_container_width=True, hide_index=True, height=400)
+            disp.columns = ["Ticker", "Weight"]
+            st.markdown(
+                styled_html_table(disp),
+                unsafe_allow_html=True)
 
     st.markdown("---")
 
     # --- Allocation simulator ---
-    st.markdown('<div class="section-label">Simulator</div>'
-                '<div class="section-title">Set Your Allocation</div>',
-                unsafe_allow_html=True)
-    st.caption("Drag sliders to allocate across fund families. Results use each family's highest-Sharpe strategy.")
+    st.markdown(
+        '<div class="section-label">Simulator</div>'
+        '<div class="section-title">Set Your Allocation</div>'
+        '<div class="section-subtitle">Drag the sliders to allocate across fund families. '
+        'The simulator uses each family\'s highest-Sharpe strategy to compute blended returns.</div>',
+        unsafe_allow_html=True)
 
     alloc_cols = st.columns(3)
     allocs = {}
@@ -740,9 +849,12 @@ elif page == "Sentiment":
     """, unsafe_allow_html=True)
 
     # --- Sector snapshot with colour-coded cards ---
-    st.markdown('<div class="section-label">Latest</div>'
-                '<div class="section-title">Sector Snapshot</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label">Latest</div>'
+        '<div class="section-title">Sector Snapshot</div>'
+        '<div class="section-subtitle">Fear & Greed scores for each equity sector on the '
+        'most recent trading day. 0 = extreme fear, 100 = extreme greed.</div>',
+        unsafe_allow_html=True)
     st.caption(f"As of {latest_date.strftime('%Y-%m-%d')}")
 
     row1 = st.columns(5)
@@ -761,10 +873,12 @@ elif page == "Sentiment":
     st.markdown("---")
 
     # --- Fear & Greed chart ---
-    st.markdown('<div class="section-label">Time Series</div>'
-                '<div class="section-title">Fear & Greed Index by Sector</div>',
-                unsafe_allow_html=True)
-    st.caption("0 = extreme fear, 50 = neutral, 100 = extreme greed. 21-day rolling mean.")
+    st.markdown(
+        '<div class="section-label">Time Series</div>'
+        '<div class="section-title">Fear & Greed Index by Sector</div>'
+        '<div class="section-subtitle">21-day rolling average of sector sentiment. '
+        'Select or deselect sectors below to compare trends over time.</div>',
+        unsafe_allow_html=True)
 
     sel_sectors = st.multiselect("Select Sectors", sectors, default=sectors,
                                  key="sent_sectors")
@@ -793,10 +907,12 @@ elif page == "Sentiment":
     st.markdown("---")
 
     # --- Heatmap ---
-    st.markdown('<div class="section-label">Distribution</div>'
-                '<div class="section-title">Sector Sentiment Heatmap</div>',
-                unsafe_allow_html=True)
-    st.caption("Monthly average Fear & Greed. Scale centred on cross-sector median.")
+    st.markdown(
+        '<div class="section-label">Distribution</div>'
+        '<div class="section-title">Sector Sentiment Heatmap</div>'
+        '<div class="section-subtitle">Monthly average Fear & Greed by sector. '
+        'Colour scale is centred on the cross-sector median for maximum contrast.</div>',
+        unsafe_allow_html=True)
 
     sent_monthly = sentiment.copy()
     sent_monthly["month"] = sent_monthly["date"].dt.to_period("M").astype(str)
@@ -828,9 +944,12 @@ elif page == "Sentiment":
     st.markdown("---")
 
     # --- Headlines ---
-    st.markdown('<div class="section-label">News Feed</div>'
-                '<div class="section-title">Headline Browser</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label">News Feed</div>'
+        '<div class="section-title">Headline Browser</div>'
+        '<div class="section-subtitle">Browse raw headlines scored by the finVADER model. '
+        'Filter by sector and ticker to explore sentiment drivers.</div>',
+        unsafe_allow_html=True)
 
     if _headlines_available:
         col_h1, col_h2, col_h3 = st.columns(3)
@@ -849,13 +968,12 @@ elif page == "Sentiment":
             hl = hl[hl["ticker"] == hl_ticker]
 
         hl = hl.sort_values("trading_date", ascending=False).head(n_headlines)
-        display_hl = hl[["trading_date", "ticker", "sector", "title"]].copy()
+        display_hl = hl[["trading_date", "ticker", "sector", "title"]].copy().reset_index(drop=True)
         display_hl["trading_date"] = display_hl["trading_date"].dt.strftime("%Y-%m-%d")
-        display_hl = display_hl.rename(columns={
-            "trading_date": "Date", "ticker": "Ticker",
-            "sector": "Sector", "title": "Headline",
-        })
-        st.dataframe(display_hl, use_container_width=True, hide_index=True)
+        display_hl.columns = ["Date", "Ticker", "Sector", "Headline"]
+        st.markdown(
+            styled_html_table(display_hl, sector_col="Sector"),
+            unsafe_allow_html=True)
     else:
         st.info(
             "Headline data is not available in this deployment. "
@@ -867,10 +985,13 @@ elif page == "Sentiment":
     st.markdown("---")
 
     # --- Fusion ---
-    st.markdown('<div class="section-label">Innovation</div>'
-                '<div class="section-title">Sentiment Fusion — Before vs After</div>',
-                unsafe_allow_html=True)
-    st.caption("Equity min-var fund with and without sector sentiment tilt (strength=0.3, lagged 1 day).")
+    st.markdown(
+        '<div class="section-label">Innovation</div>'
+        '<div class="section-title">Sentiment Fusion — Before vs After</div>'
+        '<div class="section-subtitle">Equity min-variance fund with and without '
+        'sector sentiment tilt (strength 0.3, lagged 1 day). An honest comparison '
+        'of the innovation\'s impact on risk-adjusted returns.</div>',
+        unsafe_allow_html=True)
 
     fr = load_fund_returns()
     base = fr[(fr["universe"] == "Equity") & (fr["method"] == "Minimum-variance")].sort_values("date")
@@ -930,6 +1051,11 @@ elif page == "Data Explorer":
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown(
+        '<div class="section-subtitle">Select a dataset below to view, filter, '
+        'and download the raw data powering the Quantise dashboard.</div>',
+        unsafe_allow_html=True)
+
     data_tab = st.radio(
         "Dataset",
         ["Fund Returns", "Fund Weights", "Performance Metrics",
@@ -941,7 +1067,11 @@ elif page == "Data Explorer":
 
     if data_tab == "Fund Returns":
         fr = load_fund_returns()
-        st.markdown(f"**{len(fr):,} rows** — daily out-of-sample returns.")
+        st.markdown(
+            '<div class="section-title">Fund Returns</div>'
+            '<div class="section-subtitle">Daily out-of-sample returns for each '
+            f'strategy and fund family. <strong>{len(fr):,} rows</strong> total.</div>',
+            unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -956,13 +1086,27 @@ elif page == "Data Explorer":
         st.markdown(f'<div class="badge-row">{badges}</div>', unsafe_allow_html=True)
 
         filtered = fr[fr["universe"].isin(uni_filter) & fr["method"].isin(meth_filter)]
-        st.dataframe(filtered, use_container_width=True, hide_index=True, height=400)
+        # Show first 200 rows as styled table, rest available via download
+        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
+        for c in ["daily_return", "growth_of_1"]:
+            if c in preview.columns:
+                preview[c] = preview[c].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "—")
+        st.markdown(
+            styled_html_table(preview, universe_col="universe"),
+            unsafe_allow_html=True)
+        if len(filtered) > 200:
+            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
         st.download_button("Download CSV", filtered.to_csv(index=False),
                            "fund_returns.csv", "text/csv")
 
     elif data_tab == "Fund Weights":
         fw = load_fund_weights()
-        st.markdown(f"**{len(fw):,} rows** — monthly rebalance weight snapshots.")
+        st.markdown(
+            '<div class="section-title">Fund Weights</div>'
+            '<div class="section-subtitle">Monthly rebalance weight snapshots showing '
+            f'portfolio composition over time. <strong>{len(fw):,} rows</strong> total.</div>',
+            unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -975,32 +1119,75 @@ elif page == "Data Explorer":
                     unsafe_allow_html=True)
 
         filtered = fw[(fw["universe"] == uni_f) & (fw["method"] == meth_f)]
-        st.dataframe(filtered, use_container_width=True, hide_index=True, height=400)
+        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
+        if "weight" in preview.columns:
+            preview["weight"] = preview["weight"].apply(lambda x: f"{x*100:.2f}%")
+        st.markdown(
+            styled_html_table(preview, universe_col="universe"),
+            unsafe_allow_html=True)
+        if len(filtered) > 200:
+            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
         st.download_button("Download CSV", filtered.to_csv(index=False),
                            "fund_weights.csv", "text/csv")
 
     elif data_tab == "Performance Metrics":
         pm = load_performance_metrics()
-        st.markdown(f"**{len(pm)} rows** — full scorecard.")
-        st.dataframe(pm, use_container_width=True, hide_index=True)
+        st.markdown(
+            '<div class="section-title">Performance Metrics</div>'
+            '<div class="section-subtitle">Full scorecard across all fund families, '
+            f'strategies, and cost scenarios. <strong>{len(pm)} rows</strong>.</div>',
+            unsafe_allow_html=True)
+
+        show_pm = pm.copy().reset_index(drop=True)
+        # Format numeric columns for display
+        for c in ["ann_return", "ann_vol", "max_drawdown", "total_return"]:
+            if c in show_pm.columns:
+                show_pm[c] = show_pm[c].apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
+        for c in ["var_95", "es_95"]:
+            if c in show_pm.columns:
+                show_pm[c] = show_pm[c].apply(lambda x: f"{x*100:.2f}%" if pd.notna(x) else "—")
+
+        st.markdown(
+            styled_html_table(show_pm, highlight_col="sharpe", highlight_max=True,
+                              universe_col="universe", fmt2_cols=["sharpe", "sortino"]),
+            unsafe_allow_html=True)
         st.download_button("Download CSV", pm.to_csv(index=False),
                            "performance_metrics.csv", "text/csv")
 
     elif data_tab == "Sector Sentiment":
         si = load_sector_sentiment()
-        st.markdown(f"**{len(si):,} rows** — daily sector sentiment (Fear & Greed 0–100).")
+        st.markdown(
+            '<div class="section-title">Sector Sentiment</div>'
+            '<div class="section-subtitle">Daily sector-level Fear & Greed index '
+            f'derived from scored headlines. <strong>{len(si):,} rows</strong>.</div>',
+            unsafe_allow_html=True)
 
         sector_f = st.multiselect("Sector", si["sector"].unique(),
                                   default=list(si["sector"].unique()), key="si_sec")
         filtered = si[si["sector"].isin(sector_f)]
-        st.dataframe(filtered, use_container_width=True, hide_index=True, height=400)
+        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
+        for c in ["sentiment", "fear_greed", "sentiment_lagged"]:
+            if c in preview.columns:
+                preview[c] = preview[c].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "—")
+        st.markdown(
+            styled_html_table(preview, sector_col="sector"),
+            unsafe_allow_html=True)
+        if len(filtered) > 200:
+            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
         st.download_button("Download CSV", filtered.to_csv(index=False),
                            "sector_sentiment.csv", "text/csv")
 
     elif data_tab == "Headlines":
         hl = load_headline_panel()
         if hl is not None:
-            st.markdown(f"**{len(hl):,} rows** — headlines for 50 equities, 10 sectors.")
+            st.markdown(
+                '<div class="section-title">Headlines</div>'
+                '<div class="section-subtitle">Raw news headlines scored by the finVADER '
+                f'sentiment model across 50 equities and 10 sectors. '
+                f'<strong>{len(hl):,} rows</strong>.</div>',
+                unsafe_allow_html=True)
 
             col1, col2 = st.columns(2)
             with col1:
@@ -1018,11 +1205,19 @@ elif page == "Data Explorer":
             if tick_f != "All":
                 filtered = filtered[filtered["ticker"] == tick_f]
 
-            st.dataframe(
-                filtered[["trading_date", "ticker", "sector", "title", "publisher"]].head(500),
-                use_container_width=True, hide_index=True, height=400,
-            )
-            st.caption(f"Showing first 500 of {len(filtered):,} matching headlines.")
+            preview = filtered.head(200).copy().reset_index(drop=True)
+            show_cols = ["trading_date", "ticker", "sector", "title"]
+            if "publisher" in preview.columns:
+                show_cols.append("publisher")
+            preview = preview[show_cols]
+            preview["trading_date"] = preview["trading_date"].dt.strftime("%Y-%m-%d")
+            preview.columns = ["Date", "Ticker", "Sector", "Headline"] + (
+                ["Publisher"] if "publisher" in show_cols else [])
+
+            st.markdown(
+                styled_html_table(preview, sector_col="Sector"),
+                unsafe_allow_html=True)
+            st.caption(f"Showing first 200 of {len(filtered):,} matching headlines.")
         else:
             st.info(
                 "Headline data is not available in this deployment. "
