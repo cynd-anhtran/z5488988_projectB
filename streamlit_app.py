@@ -71,8 +71,11 @@ def load_sector_sentiment():
 
 @st.cache_data
 def load_headline_panel():
+    path = DATA / "headline_panel.csv"
+    if not path.exists():
+        return None
     df = pd.read_csv(
-        DATA / "headline_panel.csv",
+        path,
         parse_dates=["trading_date"],
         dtype={"publisher": str},
         low_memory=False,
@@ -392,6 +395,8 @@ elif page == "Sentiment":
     sentiment = load_sector_sentiment()
     headlines = load_headline_panel()
 
+    _headlines_available = headlines is not None
+
     # --- Fear & Greed overview ---
     st.subheader("Fear & Greed Index by Sector")
     st.caption("0 = extreme fear, 50 = neutral, 100 = extreme greed. 21-day rolling mean for readability.")
@@ -469,31 +474,39 @@ elif page == "Sentiment":
     # --- Headline feed ---
     st.subheader("Headline Feed")
 
-    col_h1, col_h2, col_h3 = st.columns(3)
-    with col_h1:
-        hl_sector = st.selectbox("Sector", ["All"] + sectors, key="hl_sector")
-    with col_h2:
-        hl_tickers = sorted(headlines["ticker"].dropna().unique())
-        hl_ticker = st.selectbox("Ticker", ["All"] + list(hl_tickers), key="hl_ticker")
-    with col_h3:
-        n_headlines = st.slider("Headlines to show", 10, 100, 25, key="n_hl")
+    if _headlines_available:
+        col_h1, col_h2, col_h3 = st.columns(3)
+        with col_h1:
+            hl_sector = st.selectbox("Sector", ["All"] + sectors, key="hl_sector")
+        with col_h2:
+            hl_tickers = sorted(headlines["ticker"].dropna().unique())
+            hl_ticker = st.selectbox("Ticker", ["All"] + list(hl_tickers), key="hl_ticker")
+        with col_h3:
+            n_headlines = st.slider("Headlines to show", 10, 100, 25, key="n_hl")
 
-    hl = headlines.copy()
-    if hl_sector != "All":
-        hl = hl[hl["sector"] == hl_sector]
-    if hl_ticker != "All":
-        hl = hl[hl["ticker"] == hl_ticker]
+        hl = headlines.copy()
+        if hl_sector != "All":
+            hl = hl[hl["sector"] == hl_sector]
+        if hl_ticker != "All":
+            hl = hl[hl["ticker"] == hl_ticker]
 
-    hl = hl.sort_values("trading_date", ascending=False).head(n_headlines)
-    display_hl = hl[["trading_date", "ticker", "sector", "title"]].copy()
-    display_hl["trading_date"] = display_hl["trading_date"].dt.strftime("%Y-%m-%d")
-    display_hl = display_hl.rename(columns={
-        "trading_date": "Date",
-        "ticker": "Ticker",
-        "sector": "Sector",
-        "title": "Headline",
-    })
-    st.dataframe(display_hl, use_container_width=True, hide_index=True)
+        hl = hl.sort_values("trading_date", ascending=False).head(n_headlines)
+        display_hl = hl[["trading_date", "ticker", "sector", "title"]].copy()
+        display_hl["trading_date"] = display_hl["trading_date"].dt.strftime("%Y-%m-%d")
+        display_hl = display_hl.rename(columns={
+            "trading_date": "Date",
+            "ticker": "Ticker",
+            "sector": "Sector",
+            "title": "Headline",
+        })
+        st.dataframe(display_hl, use_container_width=True, hide_index=True)
+    else:
+        st.info(
+            "Headline data is not available in this deployment. "
+            "The headline_panel.csv (28 MB) is too large for the GitHub repo. "
+            "Run the app locally with `streamlit run streamlit_app.py` after "
+            "`python scripts/run_part_b.py` to browse individual headlines."
+        )
 
     # --- Fusion comparison ---
     st.subheader("Sentiment Fusion — Before vs After")
@@ -600,24 +613,31 @@ elif page == "Data Explorer":
 
     elif data_tab == "Headlines":
         hl = load_headline_panel()
-        st.markdown(f"**{len(hl):,} rows** — news headlines aligned to trading days for 50 equities across 10 sectors.")
+        if hl is not None:
+            st.markdown(f"**{len(hl):,} rows** — news headlines aligned to trading days for 50 equities across 10 sectors.")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            sec_f = st.selectbox("Sector", ["All"] + sorted(hl["sector"].dropna().unique()), key="hl_de_sec")
-        with col2:
-            tick_f = st.selectbox("Ticker", ["All"] + sorted(hl["ticker"].dropna().unique()), key="hl_de_tick")
+            col1, col2 = st.columns(2)
+            with col1:
+                sec_f = st.selectbox("Sector", ["All"] + sorted(hl["sector"].dropna().unique()), key="hl_de_sec")
+            with col2:
+                tick_f = st.selectbox("Ticker", ["All"] + sorted(hl["ticker"].dropna().unique()), key="hl_de_tick")
 
-        filtered = hl.copy()
-        if sec_f != "All":
-            filtered = filtered[filtered["sector"] == sec_f]
-        if tick_f != "All":
-            filtered = filtered[filtered["ticker"] == tick_f]
+            filtered = hl.copy()
+            if sec_f != "All":
+                filtered = filtered[filtered["sector"] == sec_f]
+            if tick_f != "All":
+                filtered = filtered[filtered["ticker"] == tick_f]
 
-        st.dataframe(
-            filtered[["trading_date", "ticker", "sector", "title", "publisher"]].head(500),
-            use_container_width=True,
-            hide_index=True,
-            height=400,
-        )
-        st.caption(f"Showing first 500 of {len(filtered):,} matching headlines.")
+            st.dataframe(
+                filtered[["trading_date", "ticker", "sector", "title", "publisher"]].head(500),
+                use_container_width=True,
+                hide_index=True,
+                height=400,
+            )
+            st.caption(f"Showing first 500 of {len(filtered):,} matching headlines.")
+        else:
+            st.info(
+                "Headline data is not available in this deployment. "
+                "The headline_panel.csv (28 MB) is too large for the GitHub repo. "
+                "Run the app locally to browse individual headlines."
+            )
