@@ -13,8 +13,9 @@ data/
 *.csv
 !results/**
 
+# Headline CSV is too large (~28 MB) for GitHub; the app reads the parquet version instead
+results/data/headline_panel.csv
+
 # Secrets / local
 .streamlit/secrets.toml
 .env
-results/data/headline_panel.csv
-results/data/headline_panel.csv

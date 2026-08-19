@@ -71,16 +71,19 @@ def load_sector_sentiment():
 
 @st.cache_data
 def load_headline_panel():
-    path = DATA / "headline_panel.csv"
-    if not path.exists():
-        return None
-    df = pd.read_csv(
-        path,
-        parse_dates=["trading_date"],
-        dtype={"publisher": str},
-        low_memory=False,
-    )
-    return df
+    # Prefer parquet (trimmed, ~5 MB) for Cloud; fall back to full CSV locally
+    pq_path = DATA / "headline_panel.parquet"
+    csv_path = DATA / "headline_panel.csv"
+    if pq_path.exists():
+        return pd.read_parquet(pq_path)
+    if csv_path.exists():
+        return pd.read_csv(
+            csv_path,
+            parse_dates=["trading_date"],
+            dtype={"publisher": str},
+            low_memory=False,
+        )
+    return None
 
 @st.cache_data
 def load_tx_cost_comparison():
@@ -417,7 +420,7 @@ elif page == "Sentiment":
 
         ax.axhline(50, color=FT_GREY, lw=0.8, ls="--", alpha=0.6)
         ax.set_ylabel("Fear & Greed (0-100)", fontsize=11)
-        ax.set_ylim(30, 70)
+        ax.set_ylim(35, 75)
         ax.legend(fontsize=8, frameon=False, ncol=2, loc="upper right")
         fig.tight_layout()
         st.pyplot(fig)
@@ -446,7 +449,7 @@ elif page == "Sentiment":
 
     # --- Sentiment heatmap ---
     st.subheader("Sector Sentiment Heatmap")
-    st.caption("Monthly average Fear & Greed score across sectors.")
+    st.caption("Monthly average Fear & Greed score across sectors. Colour scale centred on the cross-sector median to highlight relative divergence.")
 
     sent_monthly = sentiment.copy()
     sent_monthly["month"] = sent_monthly["date"].dt.to_period("M").astype(str)
@@ -459,9 +462,16 @@ elif page == "Sentiment":
         cols_to_show = list(heatmap_data.columns[::2])  # every other month
         heatmap_data = heatmap_data[cols_to_show]
 
+    # Centre colour scale on the data median so subtle variation is visible
+    median_val = np.nanmedian(heatmap_data.values)
+    spread = max(np.nanstd(heatmap_data.values) * 2.5, 3)  # at least 3 pts each side
+    vmin_heat = median_val - spread
+    vmax_heat = median_val + spread
+
     fig, ax = plt.subplots(figsize=(max(12, len(heatmap_data.columns) * 0.4), 5))
     fig.patch.set_facecolor(FT_CREAM)
-    im = ax.imshow(heatmap_data.values, aspect="auto", cmap="RdYlGn", vmin=35, vmax=65)
+    im = ax.imshow(heatmap_data.values, aspect="auto", cmap="RdYlGn",
+                   vmin=vmin_heat, vmax=vmax_heat)
     ax.set_yticks(range(len(heatmap_data.index)))
     ax.set_yticklabels(heatmap_data.index, fontsize=9)
     ax.set_xticks(range(len(heatmap_data.columns)))
