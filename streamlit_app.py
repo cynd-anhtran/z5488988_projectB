@@ -30,16 +30,13 @@ TABLES = ROOT / "results" / "tables"
 # ---------------------------------------------------------------------------
 # Design system — teal / cyan fintech palette
 # ---------------------------------------------------------------------------
-# Dark anchors
-DARK_BG      = "#1E2B1E"   # sidebar / hero gradient start
-DARK_GREEN   = "#0D1F0D"   # deepest dark
-# Primary teal family
-TEAL         = "#4ABEB2"   # primary accent
-TEAL_DARK    = "#2A9D8F"   # hover / emphasis
-TEAL_LIGHT   = "#5BC5B6"   # softer accent
-CYAN         = "#4EE4C0"   # bright highlight / gradients
-CYAN_PALE    = "#F1FAF8"   # very light tint for card bg
-# Neutrals
+DARK_BG      = "#1E2B1E"
+DARK_GREEN   = "#0D1F0D"
+TEAL         = "#4ABEB2"
+TEAL_DARK    = "#2A9D8F"
+TEAL_LIGHT   = "#5BC5B6"
+CYAN         = "#4EE4C0"
+CYAN_PALE    = "#F1FAF8"
 WHITE        = "#FFFFFF"
 GREY_50      = "#F9FAFB"
 GREY_100     = "#F3F4F6"
@@ -48,17 +45,15 @@ GREY_300     = "#D1D5DB"
 GREY_500     = "#6B7280"
 GREY_700     = "#374151"
 GREY_900     = "#111827"
-# Semantic
 SUCCESS      = "#10B981"
 DANGER       = "#EF4444"
 WARN         = "#F59E0B"
 INFO_BLUE    = "#3B82F6"
 
-# Category colour tags (for tables / badges)
 UNIVERSE_COLORS = {
-    "Equity":   {"bg": "#DBEAFE", "text": "#1E40AF"},  # blue badge
-    "Crypto":   {"bg": "#FDE68A", "text": "#92400E"},  # amber badge
-    "Combined": {"bg": "#D1FAE5", "text": "#065F46"},  # green badge
+    "Equity":   {"bg": "#DBEAFE", "text": "#1E40AF", "dot": "#3B82F6"},
+    "Crypto":   {"bg": "#FDE68A", "text": "#92400E", "dot": "#F59E0B"},
+    "Combined": {"bg": "#D1FAE5", "text": "#065F46", "dot": "#10B981"},
 }
 SECTOR_COLORS = {
     "Comm":        "#6366F1",
@@ -80,14 +75,6 @@ STRATEGY_COLORS = {
     "Risk parity":           INFO_BLUE,
     "MinVar + sentiment":    WARN,
 }
-STRATEGY_LABELS_SHORT = {
-    "Equal-weight (1/N)":    "EW",
-    "Minimum-variance":      "MinVar",
-    "Max-Sharpe (tangency)": "MaxSharpe",
-    "Risk parity":           "RiskPar",
-    "MinVar + sentiment":    "MinVar+S",
-}
-
 
 # ---------------------------------------------------------------------------
 # Data loading (cached)
@@ -128,59 +115,61 @@ def load_tx_cost_comparison():
 
 
 # ---------------------------------------------------------------------------
-# Chart helper
+# Chart helper — polished with area fill option
 # ---------------------------------------------------------------------------
 def clean_fig(width=10, height=5):
-    fig, ax = plt.subplots(figsize=(width, height))
+    fig, ax = plt.subplots(figsize=(width, height), dpi=120)
     fig.patch.set_facecolor(WHITE)
     ax.set_facecolor(WHITE)
     for spine in ax.spines.values():
         spine.set_visible(False)
-    ax.tick_params(colors=GREY_500, labelsize=8.5)
-    ax.grid(True, axis="y", color=GREY_200, linewidth=0.6, zorder=0)
+    ax.tick_params(colors=GREY_500, labelsize=8, length=0)
+    ax.grid(True, axis="y", color=GREY_200, linewidth=0.5, zorder=0)
     ax.set_axisbelow(True)
     return fig, ax
 
 
 # ---------------------------------------------------------------------------
-# HTML helpers for colour-tagged badges
+# HTML helpers
 # ---------------------------------------------------------------------------
 def universe_badge(uni: str) -> str:
     c = UNIVERSE_COLORS.get(uni, {"bg": GREY_200, "text": GREY_700})
     return (f'<span style="background:{c["bg"]};color:{c["text"]};'
-            f'padding:2px 10px;border-radius:10px;font-size:0.72rem;'
-            f'font-weight:600;letter-spacing:0.02em;">{uni}</span>')
+            f'padding:3px 12px;border-radius:12px;font-size:0.72rem;'
+            f'font-weight:600;letter-spacing:0.02em;display:inline-block;">{uni}</span>')
+
+def ticker_badge(ticker: str) -> str:
+    """Hera.I-style letter-initial circle badge + teal ticker name."""
+    letter = ticker[0].upper() if ticker else "?"
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:8px;">'
+        f'<span style="width:26px;height:26px;border-radius:50%;'
+        f'background:{DARK_BG};color:{CYAN};font-size:0.68rem;font-weight:700;'
+        f'display:inline-flex;align-items:center;justify-content:center;'
+        f'flex-shrink:0;">{letter}</span>'
+        f'<span style="color:{TEAL_DARK};font-weight:600;font-size:0.82rem;">'
+        f'{ticker}</span></span>'
+    )
 
 def sector_dot(sector: str) -> str:
     c = SECTOR_COLORS.get(sector, GREY_500)
-    return (f'<span style="display:inline-block;width:8px;height:8px;'
-            f'border-radius:50%;background:{c};margin-right:6px;'
-            f'vertical-align:middle;"></span>'
-            f'<span style="vertical-align:middle;">{sector}</span>')
+    return (f'<span style="display:inline-flex;align-items:center;gap:6px;">'
+            f'<span style="width:8px;height:8px;border-radius:50%;'
+            f'background:{c};flex-shrink:0;"></span>'
+            f'<span>{sector}</span></span>')
 
 
 # ---------------------------------------------------------------------------
-# Styled HTML table builder
+# Styled HTML table — Hera.I reference style
 # ---------------------------------------------------------------------------
 def styled_html_table(df, highlight_col=None, highlight_max=True,
-                      universe_col=None, sector_col=None, pct_cols=None,
-                      fmt2_cols=None):
-    """Render a professional HTML table with colour-coded rows and badges.
-
-    Parameters
-    ----------
-    df : DataFrame to render (already formatted strings where needed)
-    highlight_col : column name to highlight best value row
-    highlight_max : True = highest is best, False = lowest
-    universe_col : column containing universe names for badge rendering
-    sector_col : column containing sector names for dot rendering
-    pct_cols : list of columns already formatted as percentages (no extra fmt)
-    fmt2_cols : list of columns to format to 2 decimal places
-    """
-    pct_cols = pct_cols or []
+                      universe_col=None, sector_col=None, ticker_col=None,
+                      fmt2_cols=None, max_height=None, compact=False):
+    """Professional HTML table with colour-coded badges and clean borders."""
     fmt2_cols = fmt2_cols or []
+    font_size = "0.78rem" if compact else "0.82rem"
+    pad = "8px 12px" if compact else "11px 16px"
 
-    # Find best row index
     best_idx = None
     if highlight_col and highlight_col in df.columns:
         try:
@@ -189,63 +178,63 @@ def styled_html_table(df, highlight_col=None, highlight_max=True,
         except Exception:
             pass
 
-    # Build HTML
-    header_cells = "".join(
-        f'<th style="padding:10px 14px;text-align:left;font-size:0.73rem;'
-        f'font-weight:700;text-transform:uppercase;letter-spacing:0.05em;'
-        f'color:{GREY_500};border-bottom:2px solid {TEAL};'
-        f'background:{WHITE};">{col}</th>'
+    # Header
+    header = "".join(
+        f'<th style="position:sticky;top:0;padding:{pad};text-align:left;'
+        f'font-size:0.7rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:0.06em;color:{GREY_500};background:{GREY_50};'
+        f'border-bottom:2px solid {GREY_200};z-index:1;">{col}</th>'
         for col in df.columns
     )
 
-    rows_html = ""
-    for idx, row in df.iterrows():
+    # Rows
+    rows = ""
+    for i, (idx, row) in enumerate(df.iterrows()):
         is_best = (idx == best_idx) if best_idx is not None else False
-        row_bg = CYAN_PALE if is_best else WHITE
-        border_left = f"3px solid {TEAL}" if is_best else "3px solid transparent"
-        row_weight = "600" if is_best else "400"
+        bg = CYAN_PALE if is_best else (WHITE if i % 2 == 0 else GREY_50)
+        left_border = f"border-left:3px solid {TEAL};" if is_best else ""
+        weight = "600" if is_best else "400"
 
         cells = ""
         for col in df.columns:
             val = row[col]
-            cell_style = (
-                f'padding:10px 14px;font-size:0.82rem;color:{GREY_900};'
-                f'font-weight:{row_weight};border-bottom:1px solid {GREY_200};'
-                f'white-space:nowrap;'
-            )
+            style = (f'padding:{pad};font-size:{font_size};color:{GREY_900};'
+                     f'font-weight:{weight};border-bottom:1px solid {GREY_100};'
+                     f'white-space:nowrap;vertical-align:middle;')
 
-            # Render universe badge
             if universe_col and col == universe_col and val in UNIVERSE_COLORS:
-                cell_content = universe_badge(val)
-            # Render sector dot
+                content = universe_badge(val)
             elif sector_col and col == sector_col and val in SECTOR_COLORS:
-                cell_content = sector_dot(val)
-            # Format numeric
+                content = sector_dot(val)
+            elif ticker_col and col == ticker_col:
+                content = ticker_badge(str(val))
             elif col in fmt2_cols:
                 try:
-                    cell_content = f"{float(val):.2f}"
+                    content = f"{float(val):.2f}"
                 except (ValueError, TypeError):
-                    cell_content = str(val)
+                    content = str(val)
             else:
-                cell_content = str(val)
+                content = str(val) if pd.notna(val) else "—"
 
-            cells += f'<td style="{cell_style}">{cell_content}</td>'
+            cells += f'<td style="{style}">{content}</td>'
 
-        rows_html += (
-            f'<tr style="background:{row_bg};border-left:{border_left};'
-            f'transition:background 0.15s;"'
+        rows += (
+            f'<tr style="background:{bg};{left_border}'
+            f'transition:background 0.12s;"'
             f' onmouseover="this.style.background=\'#F0FDFA\'"'
-            f' onmouseout="this.style.background=\'{row_bg}\'"'
+            f' onmouseout="this.style.background=\'{bg}\'"'
             f'>{cells}</tr>'
         )
 
+    scroll = f"max-height:{max_height}px;overflow-y:auto;" if max_height else ""
+
     return (
-        f'<div style="overflow-x:auto;border-radius:10px;'
-        f'border:1px solid {GREY_200};margin-bottom:1rem;">'
+        f'<div style="{scroll}border-radius:10px;'
+        f'border:1px solid {GREY_200};margin-bottom:1rem;overflow-x:auto;">'
         f'<table style="width:100%;border-collapse:collapse;'
         f'font-family:Inter,-apple-system,sans-serif;">'
-        f'<thead><tr>{header_cells}</tr></thead>'
-        f'<tbody>{rows_html}</tbody></table></div>'
+        f'<thead><tr>{header}</tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>'
     )
 
 
@@ -260,30 +249,25 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Global CSS — aggressive white background + polished typography
+# Global CSS
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-    /* Force true white everywhere */
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         color: #111827;
     }
-    .main,
-    .stApp,
-    [data-testid="stAppViewContainer"],
-    [data-testid="stAppViewBlockContainer"],
-    [data-testid="stVerticalBlock"],
-    [data-testid="stMain"],
-    .block-container {
+    /* Force white background everywhere */
+    .main, .stApp, [data-testid="stAppViewContainer"],
+    [data-testid="stAppViewBlockContainer"], [data-testid="stVerticalBlock"],
+    [data-testid="stMain"], .block-container,
+    [data-testid="stBottomBlockContainer"] {
         background-color: #FFFFFF !important;
     }
     .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
-        max-width: 1200px;
+        padding-top: 1rem; padding-bottom: 2rem; max-width: 1200px;
     }
 
     /* Sidebar */
@@ -292,165 +276,85 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] * { color: #E5E7EB !important; }
     section[data-testid="stSidebar"] .stRadio label {
-        border-radius: 8px;
-        padding: 6px 10px;
-        transition: background 0.2s;
+        border-radius: 8px; padding: 6px 10px; transition: background 0.2s;
     }
     section[data-testid="stSidebar"] .stRadio label:hover {
         background: rgba(78, 228, 192, 0.12);
     }
 
     /* Typography */
-    h1 {
-        color: #111827 !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.03em !important;
-        font-size: 1.9rem !important;
-    }
-    h2, h3 {
-        color: #111827 !important;
-        font-weight: 700 !important;
-    }
+    h1 { color: #111827 !important; font-weight: 800 !important;
+         letter-spacing: -0.03em !important; font-size: 1.9rem !important; }
+    h2, h3 { color: #111827 !important; font-weight: 700 !important; }
 
-    /* Section label + subtitle */
     .section-label {
-        font-size: 0.68rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: #4ABEB2;
-        margin-bottom: 4px;
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.1em; color: #4ABEB2; margin-bottom: 4px;
     }
     .section-title {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #111827;
-        margin-bottom: 2px;
+        font-size: 1.15rem; font-weight: 700; color: #111827; margin-bottom: 2px;
     }
     .section-subtitle {
-        font-size: 0.82rem;
-        color: #6B7280;
-        margin-bottom: 14px;
-        line-height: 1.5;
+        font-size: 0.82rem; color: #6B7280; margin-bottom: 14px; line-height: 1.5;
     }
 
     /* Metric cards */
     div[data-testid="stMetric"] {
-        background: #F9FAFB;
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 16px 20px;
-        transition: border-color 0.2s;
+        background: #F9FAFB; border: 1px solid #E5E7EB;
+        border-radius: 12px; padding: 16px 20px; transition: border-color 0.2s;
     }
-    div[data-testid="stMetric"]:hover {
-        border-color: #4ABEB2;
-    }
+    div[data-testid="stMetric"]:hover { border-color: #4ABEB2; }
     div[data-testid="stMetric"] label {
-        font-size: 0.72rem !important;
-        font-weight: 600 !important;
-        color: #6B7280 !important;
-        text-transform: uppercase;
+        font-size: 0.72rem !important; font-weight: 600 !important;
+        color: #6B7280 !important; text-transform: uppercase;
         letter-spacing: 0.06em;
     }
     div[data-testid="stMetricValue"] {
-        font-size: 1.55rem !important;
-        font-weight: 800 !important;
+        font-size: 1.55rem !important; font-weight: 800 !important;
         color: #111827 !important;
     }
 
-    /* DataFrames — cleaner */
-    .stDataFrame { border-radius: 10px; overflow: hidden; }
-
-    /* Expander */
-    .streamlit-expanderHeader {
-        font-weight: 600 !important;
-        font-size: 0.9rem !important;
+    /* Chart card wrapper */
+    .chart-card {
+        background: #FFFFFF; border: 1px solid #E5E7EB;
+        border-radius: 12px; padding: 20px 20px 12px; margin-bottom: 0.8rem;
+    }
+    .chart-card-title {
+        font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.06em; color: #6B7280; margin-bottom: 12px;
     }
 
-    /* Dividers */
+    .stDataFrame { border-radius: 10px; overflow: hidden; }
+    .streamlit-expanderHeader { font-weight: 600 !important; font-size: 0.9rem !important; }
     hr { border: none; border-top: 1px solid #E5E7EB; margin: 1.5rem 0; }
 
-    /* Download button */
     .stDownloadButton > button {
-        background: #1E2B1E;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.82rem;
-        padding: 6px 18px;
+        background: #1E2B1E; color: white; border: none;
+        border-radius: 8px; font-weight: 600; font-size: 0.82rem; padding: 6px 18px;
     }
     .stDownloadButton > button:hover { background: #2A9D8F; color: white; }
 
-    /* Hero banner */
+    /* Hero */
     .hero {
         background: linear-gradient(135deg, #1E2B1E 0%, #2A9D8F 100%);
-        border-radius: 16px;
-        padding: 28px 32px;
-        color: white;
-        margin-bottom: 1.5rem;
+        border-radius: 16px; padding: 28px 32px; color: white; margin-bottom: 1.5rem;
     }
     .hero .hero-label {
-        font-size: 0.68rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #4EE4C0;
-        margin-bottom: 6px;
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.12em; color: #4EE4C0; margin-bottom: 6px;
     }
-    .hero .hero-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-        margin-bottom: 18px;
-    }
-    .hero .kpi-row {
-        display: flex;
-        gap: 24px;
-        flex-wrap: wrap;
-    }
-    .hero .kpi-item {
-        flex: 1;
-        min-width: 140px;
-    }
-    .hero .kpi-item .kpi-val {
-        font-size: 1.5rem;
-        font-weight: 800;
-        line-height: 1.2;
-    }
+    .hero .hero-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 18px; }
+    .hero .kpi-row { display: flex; gap: 24px; flex-wrap: wrap; }
+    .hero .kpi-item { flex: 1; min-width: 140px; }
+    .hero .kpi-item .kpi-val { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
     .hero .kpi-item .kpi-lbl {
-        font-size: 0.68rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        opacity: 0.7;
-        margin-bottom: 2px;
-        font-weight: 600;
+        font-size: 0.68rem; text-transform: uppercase;
+        letter-spacing: 0.08em; opacity: 0.7; margin-bottom: 2px; font-weight: 600;
     }
-    .hero .kpi-item .kpi-sub {
-        font-size: 0.72rem;
-        opacity: 0.55;
-        margin-top: 2px;
-    }
+    .hero .kpi-item .kpi-sub { font-size: 0.72rem; opacity: 0.55; margin-top: 2px; }
 
-    /* Card wrapper */
-    .card {
-        background: #F9FAFB;
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-bottom: 1rem;
-    }
-
-    /* Badge row */
     .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-
-    /* Info box */
     div[data-testid="stAlert"] { border-radius: 10px; }
-
-    /* Force white bg on selectbox/multiselect dropdowns */
-    [data-testid="stSelectbox"],
-    [data-testid="stMultiSelect"] {
-        background-color: #FFFFFF !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -467,13 +371,8 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 st.sidebar.markdown("---")
-
-page = st.sidebar.radio(
-    "Navigate",
-    ["Funds", "Sentiment", "Data Explorer"],
-    label_visibility="collapsed",
-)
-
+page = st.sidebar.radio("Navigate",
+    ["Funds", "Sentiment", "Data Explorer"], label_visibility="collapsed")
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     "<div style='font-size:0.7rem; opacity:0.45; line-height:1.7;'>"
@@ -481,9 +380,7 @@ st.sidebar.markdown(
     "Walk-forward OOS backtests<br>"
     "Long-only · Monthly rebalance<br>"
     "Equity &radic;252 &nbsp;|&nbsp; Crypto &radic;365"
-    "</div>",
-    unsafe_allow_html=True,
-)
+    "</div>", unsafe_allow_html=True)
 
 
 # =========================================================================
@@ -499,13 +396,12 @@ if page == "Funds":
     base_methods = ["Equal-weight (1/N)", "Minimum-variance",
                     "Max-Sharpe (tangency)", "Risk parity"]
 
-    # --- Hero banner ---
+    # --- Hero ---
     base_m = metrics[
         (metrics["tx_cost_bps"] == 0) &
         (~metrics["method"].str.contains("sentiment|base", case=False, na=False))
     ]
     eq_best = base_m[base_m["universe"] == "Equity"].nlargest(1, "sharpe").iloc[0]
-    comb_best = base_m[base_m["universe"] == "Combined"].nlargest(1, "sharpe").iloc[0]
     oos_start = fund_returns["date"].min().strftime("%b %Y")
     oos_end = fund_returns["date"].max().strftime("%b %Y")
 
@@ -548,12 +444,10 @@ if page == "Funds":
             available_methods.append("MinVar + sentiment")
         selected_methods = st.multiselect("Strategies", available_methods,
                                           default=available_methods)
-
     if not selected_methods:
         st.warning("Please select at least one strategy.")
         st.stop()
 
-    # Universe badge
     st.markdown(f'<div class="badge-row">{universe_badge(selected_universe)}</div>',
                 unsafe_allow_html=True)
 
@@ -578,34 +472,46 @@ if page == "Funds":
 
     st.markdown("---")
 
-    # --- Charts side-by-side ---
+    # --- Charts in card containers ---
     st.markdown(
         '<div class="section-label">Performance</div>'
         '<div class="section-title">Growth of $1 & Drawdowns</div>'
-        '<div class="section-subtitle">Track cumulative out-of-sample performance '
-        'and peak-to-trough drawdowns across selected strategies.</div>',
+        '<div class="section-subtitle">Cumulative out-of-sample performance and '
+        'peak-to-trough drawdowns for each strategy.</div>',
         unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
 
     with c1:
+        st.markdown('<div class="chart-card"><div class="chart-card-title">'
+                    'Cumulative Growth</div>', unsafe_allow_html=True)
         fig, ax = clean_fig(7, 4)
         for method in selected_methods:
             sub = fr[fr["method"] == method].sort_values("date")
             if sub.empty:
                 continue
             color = STRATEGY_COLORS.get(method, GREY_500)
-            ax.plot(sub["date"], sub["growth_of_1"], label=method, color=color, lw=2)
+            ax.plot(sub["date"], sub["growth_of_1"], color=color, lw=2.2,
+                    label=method, zorder=3)
+            # Area fill for the first (best) strategy only
+            if method == selected_methods[0]:
+                ax.fill_between(sub["date"], 1, sub["growth_of_1"],
+                                alpha=0.06, color=color, zorder=1)
+        ax.axhline(1, color=GREY_300, lw=0.7, ls="--", alpha=0.5, zorder=2)
         ax.set_ylabel("Value of $1", fontsize=9, color=GREY_500)
-        ax.legend(fontsize=7, frameon=False, loc="upper left")
+        ax.legend(fontsize=7.5, frameon=False, loc="upper left",
+                  handlelength=1.5, labelspacing=0.4)
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
         plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=7.5)
         fig.tight_layout()
         st.pyplot(fig)
         plt.close()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with c2:
+        st.markdown('<div class="chart-card"><div class="chart-card-title">'
+                    'Drawdown Analysis</div>', unsafe_allow_html=True)
         fig, ax = clean_fig(7, 4)
         for method in selected_methods:
             sub = fr[fr["method"] == method].sort_values("date")
@@ -615,26 +521,29 @@ if page == "Funds":
             running_max = np.maximum.accumulate(wealth)
             dd = wealth / running_max - 1.0
             color = STRATEGY_COLORS.get(method, GREY_500)
-            ax.fill_between(sub["date"], dd, 0, alpha=0.15, color=color)
-            ax.plot(sub["date"], dd, color=color, lw=1.3, label=method)
+            ax.fill_between(sub["date"], dd, 0, alpha=0.12, color=color, zorder=1)
+            ax.plot(sub["date"], dd, color=color, lw=1.8, label=method, zorder=3)
+        ax.axhline(0, color=GREY_300, lw=0.7, zorder=2)
         ax.set_ylabel("Drawdown", fontsize=9, color=GREY_500)
         ax.yaxis.set_major_formatter(mticker.PercentFormatter(1.0))
-        ax.legend(fontsize=7, frameon=False, loc="lower left")
+        ax.legend(fontsize=7.5, frameon=False, loc="lower left",
+                  handlelength=1.5, labelspacing=0.4)
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
         plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=7.5)
         fig.tight_layout()
         st.pyplot(fig)
         plt.close()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # --- Performance table with styled HTML ---
+    # --- Performance scorecard ---
     st.markdown(
         '<div class="section-label">Metrics</div>'
         '<div class="section-title">Performance Scorecard</div>'
-        '<div class="section-subtitle">Compare risk-adjusted returns, drawdowns, '
-        'and tail-risk metrics. The best Sharpe row is highlighted in teal.</div>',
+        '<div class="section-subtitle">Risk-adjusted returns, drawdowns, and tail-risk '
+        'metrics. Best Sharpe row highlighted.</div>',
         unsafe_allow_html=True)
 
     sel_base = metrics[
@@ -649,8 +558,6 @@ if page == "Funds":
         show.columns = ["Strategy", "Ann. Return", "Ann. Vol", "Sharpe", "Sortino",
                         "Max DD", "VaR 95%", "ES 95%", "Total Return"]
         show = show.reset_index(drop=True)
-
-        # Format percentages
         for col in ["Ann. Return", "Ann. Vol", "Max DD", "Total Return"]:
             show[col] = show[col].apply(lambda x: f"{x*100:.1f}%")
         for col in ["VaR 95%", "ES 95%"]:
@@ -661,7 +568,7 @@ if page == "Funds":
                               fmt2_cols=["Sharpe", "Sortino"]),
             unsafe_allow_html=True)
 
-    # --- TX cost expander ---
+    # TX cost
     tc_data = metrics[
         (metrics["universe"] == selected_universe) &
         (metrics["method"].isin(base_methods))
@@ -670,7 +577,6 @@ if page == "Funds":
         columns={"sharpe": "Sharpe (0 bps)"})
     tc_10 = tc_data[tc_data["tx_cost_bps"] == 10][["method", "sharpe"]].rename(
         columns={"sharpe": "Sharpe (10 bps)"})
-
     if not tc_0.empty and not tc_10.empty:
         tc_compare = tc_0.merge(tc_10, on="method")
         tc_compare["Impact"] = tc_compare.apply(
@@ -688,12 +594,12 @@ if page == "Funds":
 
     st.markdown("---")
 
-    # --- Holdings ---
+    # --- Holdings with ticker badges ---
     st.markdown(
         '<div class="section-label">Composition</div>'
         '<div class="section-title">Current Holdings</div>'
-        '<div class="section-subtitle">View the latest portfolio weights for the selected '
-        'strategy. Top 15 positions are shown in the chart; full list in the table.</div>',
+        '<div class="section-subtitle">Latest portfolio weights. Top 15 positions '
+        'are shown in the bar chart; full list in the scrollable table.</div>',
         unsafe_allow_html=True)
 
     hold_c1, hold_c2 = st.columns([1, 2])
@@ -715,26 +621,33 @@ if page == "Funds":
 
         col_chart, col_table = st.columns([1.3, 1])
         with col_chart:
+            st.markdown('<div class="chart-card"><div class="chart-card-title">'
+                        'Top 15 Weights</div>', unsafe_allow_html=True)
             top = latest.head(15)
             fig, ax = clean_fig(6, 5)
-            # Gradient bar colours
             n_bars = len(top)
-            bar_colors = [plt.cm.Greens(0.4 + 0.5 * i / max(n_bars - 1, 1))
-                          for i in range(n_bars)]
+            # Teal gradient bars
+            from matplotlib.colors import LinearSegmentedColormap
+            teal_cmap = LinearSegmentedColormap.from_list(
+                "teal_grad", ["#B2DFDB", TEAL_DARK], N=n_bars)
+            bar_colors = [teal_cmap(i / max(n_bars - 1, 1)) for i in range(n_bars)]
             ax.barh(top["ticker"].values[::-1], top["weight"].values[::-1],
-                    color=bar_colors[::-1], edgecolor="white", height=0.6)
+                    color=bar_colors[::-1], edgecolor="white", height=0.65,
+                    zorder=3)
             ax.set_xlabel("Weight", fontsize=8.5, color=GREY_500)
             ax.xaxis.set_major_formatter(mticker.PercentFormatter(1.0))
             fig.tight_layout()
             st.pyplot(fig)
             plt.close()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with col_table:
             disp = latest[["ticker", "weight"]].copy().reset_index(drop=True)
             disp["weight"] = disp["weight"].apply(lambda x: f"{x*100:.2f}%")
             disp.columns = ["Ticker", "Weight"]
             st.markdown(
-                styled_html_table(disp),
+                styled_html_table(disp, ticker_col="Ticker", max_height=420,
+                                  compact=True),
                 unsafe_allow_html=True)
 
     st.markdown("---")
@@ -743,8 +656,8 @@ if page == "Funds":
     st.markdown(
         '<div class="section-label">Simulator</div>'
         '<div class="section-title">Set Your Allocation</div>'
-        '<div class="section-subtitle">Drag the sliders to allocate across fund families. '
-        'The simulator uses each family\'s highest-Sharpe strategy to compute blended returns.</div>',
+        '<div class="section-subtitle">Drag sliders to allocate across fund families. '
+        'Uses each family\'s highest-Sharpe strategy for blended returns.</div>',
         unsafe_allow_html=True)
 
     alloc_cols = st.columns(3)
@@ -819,7 +732,6 @@ elif page == "Sentiment":
     bull = latest_sent.iloc[0]
     bear = latest_sent.iloc[-1]
 
-    # --- Hero ---
     st.markdown(f"""
     <div class="hero">
         <div class="hero-label">Sentiment Analytics</div>
@@ -848,19 +760,18 @@ elif page == "Sentiment":
     </div>
     """, unsafe_allow_html=True)
 
-    # --- Sector snapshot with colour-coded cards ---
+    # Sector snapshot
     st.markdown(
         '<div class="section-label">Latest</div>'
         '<div class="section-title">Sector Snapshot</div>'
-        '<div class="section-subtitle">Fear & Greed scores for each equity sector on the '
-        'most recent trading day. 0 = extreme fear, 100 = extreme greed.</div>',
+        '<div class="section-subtitle">Fear & Greed scores on the most recent trading day. '
+        '0 = extreme fear, 100 = extreme greed.</div>',
         unsafe_allow_html=True)
     st.caption(f"As of {latest_date.strftime('%Y-%m-%d')}")
 
     row1 = st.columns(5)
     row2 = st.columns(5)
     all_cols = row1 + row2
-
     for i, (_, row) in enumerate(latest_sent.iterrows()):
         if i >= 10:
             break
@@ -872,82 +783,87 @@ elif page == "Sentiment":
 
     st.markdown("---")
 
-    # --- Fear & Greed chart ---
+    # F&G time series
     st.markdown(
         '<div class="section-label">Time Series</div>'
         '<div class="section-title">Fear & Greed Index by Sector</div>'
-        '<div class="section-subtitle">21-day rolling average of sector sentiment. '
-        'Select or deselect sectors below to compare trends over time.</div>',
+        '<div class="section-subtitle">21-day rolling average. Select or deselect '
+        'sectors to compare trends over time.</div>',
         unsafe_allow_html=True)
 
     sel_sectors = st.multiselect("Select Sectors", sectors, default=sectors,
                                  key="sent_sectors")
-
     if sel_sectors:
+        st.markdown('<div class="chart-card"><div class="chart-card-title">'
+                    'Fear & Greed Rolling Average</div>', unsafe_allow_html=True)
         fig, ax = clean_fig(10, 4.5)
         for sector in sel_sectors:
             color = SECTOR_COLORS.get(sector, GREY_500)
             data = sentiment[sentiment["sector"] == sector].sort_values("date")
             smoothed = data["fear_greed"].rolling(21, min_periods=1).mean()
             ax.plot(data["date"].values, smoothed.values, color=color,
-                    lw=1.5, label=sector)
-
-        ax.axhline(50, color=GREY_300, lw=0.8, ls="--", alpha=0.7)
+                    lw=1.8, label=sector, zorder=3)
+        ax.axhline(50, color=GREY_300, lw=0.8, ls="--", alpha=0.6, zorder=2)
+        ax.fill_between(sentiment["date"].sort_values().unique(),
+                        45, 55, alpha=0.04, color=GREY_500, zorder=1)
         ax.set_ylabel("Fear & Greed (0–100)", fontsize=9, color=GREY_500)
         ax.set_ylim(35, 75)
-        ax.legend(fontsize=7, frameon=False, ncol=5, loc="upper center",
-                  bbox_to_anchor=(0.5, 1.12))
+        ax.legend(fontsize=7.5, frameon=False, ncol=5, loc="upper center",
+                  bbox_to_anchor=(0.5, 1.12), handlelength=1.5)
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=4))
         plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=7.5)
         fig.tight_layout()
         st.pyplot(fig)
         plt.close()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # --- Heatmap ---
+    # Heatmap
     st.markdown(
         '<div class="section-label">Distribution</div>'
         '<div class="section-title">Sector Sentiment Heatmap</div>'
-        '<div class="section-subtitle">Monthly average Fear & Greed by sector. '
-        'Colour scale is centred on the cross-sector median for maximum contrast.</div>',
+        '<div class="section-subtitle">Monthly average Fear & Greed. Colour scale '
+        'centred on cross-sector median for maximum contrast.</div>',
         unsafe_allow_html=True)
 
     sent_monthly = sentiment.copy()
     sent_monthly["month"] = sent_monthly["date"].dt.to_period("M").astype(str)
     heatmap_data = sent_monthly.pivot_table(
         index="sector", columns="month", values="fear_greed", aggfunc="mean")
-
     if heatmap_data.shape[1] > 24:
         heatmap_data = heatmap_data[list(heatmap_data.columns[::2])]
 
     median_val = np.nanmedian(heatmap_data.values)
     spread = max(np.nanstd(heatmap_data.values) * 2.5, 3)
 
-    fig, ax = plt.subplots(figsize=(max(12, len(heatmap_data.columns) * 0.45), 4.5))
+    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+    fig, ax = plt.subplots(figsize=(max(12, len(heatmap_data.columns) * 0.5), 4.5),
+                           dpi=120)
     fig.patch.set_facecolor(WHITE)
     im = ax.imshow(heatmap_data.values, aspect="auto", cmap="RdYlGn",
                    vmin=median_val - spread, vmax=median_val + spread)
     ax.set_yticks(range(len(heatmap_data.index)))
-    ax.set_yticklabels(heatmap_data.index, fontsize=8)
+    ax.set_yticklabels(heatmap_data.index, fontsize=8.5)
     ax.set_xticks(range(len(heatmap_data.columns)))
-    ax.set_xticklabels(heatmap_data.columns, fontsize=6, rotation=45, ha="right")
-    ax.tick_params(colors=GREY_500)
+    ax.set_xticklabels(heatmap_data.columns, fontsize=6.5, rotation=45, ha="right")
+    ax.tick_params(colors=GREY_500, length=0)
     for spine in ax.spines.values():
         spine.set_visible(False)
     fig.colorbar(im, ax=ax, label="Fear & Greed", shrink=0.8)
     fig.tight_layout()
     st.pyplot(fig)
     plt.close()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # --- Headlines ---
+    # Headlines
     st.markdown(
         '<div class="section-label">News Feed</div>'
         '<div class="section-title">Headline Browser</div>'
-        '<div class="section-subtitle">Browse raw headlines scored by the finVADER model. '
+        '<div class="section-subtitle">Browse raw headlines scored by finVADER. '
         'Filter by sector and ticker to explore sentiment drivers.</div>',
         unsafe_allow_html=True)
 
@@ -972,25 +888,24 @@ elif page == "Sentiment":
         display_hl["trading_date"] = display_hl["trading_date"].dt.strftime("%Y-%m-%d")
         display_hl.columns = ["Date", "Ticker", "Sector", "Headline"]
         st.markdown(
-            styled_html_table(display_hl, sector_col="Sector"),
+            styled_html_table(display_hl, ticker_col="Ticker", sector_col="Sector",
+                              max_height=500),
             unsafe_allow_html=True)
     else:
         st.info(
             "Headline data is not available in this deployment. "
             "The headline_panel.csv (28 MB) is too large for the GitHub repo. "
-            "Run the app locally with `streamlit run streamlit_app.py` after "
-            "`python scripts/run_part_b.py` to browse individual headlines."
+            "Run locally after `python scripts/run_part_b.py` to browse headlines."
         )
 
     st.markdown("---")
 
-    # --- Fusion ---
+    # Fusion
     st.markdown(
         '<div class="section-label">Innovation</div>'
         '<div class="section-title">Sentiment Fusion — Before vs After</div>'
-        '<div class="section-subtitle">Equity min-variance fund with and without '
-        'sector sentiment tilt (strength 0.3, lagged 1 day). An honest comparison '
-        'of the innovation\'s impact on risk-adjusted returns.</div>',
+        '<div class="section-subtitle">Equity min-variance with and without sector '
+        'sentiment tilt (strength 0.3, lagged 1 day).</div>',
         unsafe_allow_html=True)
 
     fr = load_fund_returns()
@@ -999,27 +914,33 @@ elif page == "Sentiment":
 
     if not base.empty and not tilted.empty:
         col_fc, col_fm = st.columns([2, 1])
-
         with col_fc:
+            st.markdown('<div class="chart-card"><div class="chart-card-title">'
+                        'Growth Comparison</div>', unsafe_allow_html=True)
             fig, ax = clean_fig(8, 4)
+            ax.fill_between(base["date"], 1, base["growth_of_1"],
+                            alpha=0.06, color=GREY_500, zorder=1)
             ax.plot(base["date"], base["growth_of_1"], color=GREY_300, lw=2.2,
-                    label="Base (no sentiment)")
+                    label="Base (no sentiment)", zorder=3)
+            ax.fill_between(tilted["date"], 1, tilted["growth_of_1"],
+                            alpha=0.08, color=TEAL, zorder=1)
             ax.plot(tilted["date"], tilted["growth_of_1"], color=TEAL, lw=2.2,
-                    label="Sentiment-tilted")
+                    label="Sentiment-tilted", zorder=3)
+            ax.axhline(1, color=GREY_300, lw=0.7, ls="--", alpha=0.5, zorder=2)
             ax.set_ylabel("Value of $1", fontsize=9, color=GREY_500)
-            ax.legend(fontsize=8.5, frameon=False)
+            ax.legend(fontsize=8.5, frameon=False, handlelength=1.5)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
             ax.xaxis.set_major_locator(mdates.MonthLocator(interval=4))
             plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=7.5)
             fig.tight_layout()
             st.pyplot(fig)
             plt.close()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with col_fm:
             met = load_performance_metrics()
             base_m = met[(met["method"] == "MinVar (base)") & (met["tx_cost_bps"] == 0)]
             tilt_m = met[(met["method"] == "MinVar + sentiment") & (met["tx_cost_bps"] == 0)]
-
             if not base_m.empty and not tilt_m.empty:
                 bm = base_m.iloc[0]
                 tm = tilt_m.iloc[0]
@@ -1050,19 +971,14 @@ elif page == "Data Explorer":
         <div class="hero-title">Browse & Download Underlying Data</div>
     </div>
     """, unsafe_allow_html=True)
-
     st.markdown(
-        '<div class="section-subtitle">Select a dataset below to view, filter, '
+        '<div class="section-subtitle">Select a dataset to view, filter, '
         'and download the raw data powering the Quantise dashboard.</div>',
         unsafe_allow_html=True)
 
-    data_tab = st.radio(
-        "Dataset",
+    data_tab = st.radio("Dataset",
         ["Fund Returns", "Fund Weights", "Performance Metrics",
-         "Sector Sentiment", "Headlines"],
-        horizontal=True,
-    )
-
+         "Sector Sentiment", "Headlines"], horizontal=True)
     st.markdown("---")
 
     if data_tab == "Fund Returns":
@@ -1070,9 +986,8 @@ elif page == "Data Explorer":
         st.markdown(
             '<div class="section-title">Fund Returns</div>'
             '<div class="section-subtitle">Daily out-of-sample returns for each '
-            f'strategy and fund family. <strong>{len(fr):,} rows</strong> total.</div>',
+            f'strategy and fund family. <strong>{len(fr):,} rows</strong>.</div>',
             unsafe_allow_html=True)
-
         col1, col2 = st.columns(2)
         with col1:
             uni_filter = st.multiselect("Universe", fr["universe"].unique(),
@@ -1080,55 +995,49 @@ elif page == "Data Explorer":
         with col2:
             meth_filter = st.multiselect("Method", fr["method"].unique(),
                                          default=list(fr["method"].unique()), key="de_meth")
-
-        # Show universe badges
         badges = " ".join(universe_badge(u) for u in uni_filter)
         st.markdown(f'<div class="badge-row">{badges}</div>', unsafe_allow_html=True)
 
         filtered = fr[fr["universe"].isin(uni_filter) & fr["method"].isin(meth_filter)]
-        # Show first 200 rows as styled table, rest available via download
-        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview = filtered.head(100).copy().reset_index(drop=True)
         preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
         for c in ["daily_return", "growth_of_1"]:
             if c in preview.columns:
                 preview[c] = preview[c].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "—")
         st.markdown(
-            styled_html_table(preview, universe_col="universe"),
+            styled_html_table(preview, universe_col="universe", max_height=450),
             unsafe_allow_html=True)
-        if len(filtered) > 200:
-            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
-        st.download_button("Download CSV", filtered.to_csv(index=False),
+        st.caption(f"Showing first 100 of {len(filtered):,} rows.")
+        st.download_button("Download Full CSV", filtered.to_csv(index=False),
                            "fund_returns.csv", "text/csv")
 
     elif data_tab == "Fund Weights":
         fw = load_fund_weights()
         st.markdown(
             '<div class="section-title">Fund Weights</div>'
-            '<div class="section-subtitle">Monthly rebalance weight snapshots showing '
-            f'portfolio composition over time. <strong>{len(fw):,} rows</strong> total.</div>',
+            '<div class="section-subtitle">Monthly rebalance weight snapshots. '
+            f'<strong>{len(fw):,} rows</strong>.</div>',
             unsafe_allow_html=True)
-
         col1, col2 = st.columns(2)
         with col1:
             uni_f = st.selectbox("Universe", fw["universe"].unique(), key="fw_uni")
         with col2:
             meth_f = st.selectbox("Method",
                                   fw[fw["universe"] == uni_f]["method"].unique(), key="fw_meth")
-
         st.markdown(f'<div class="badge-row">{universe_badge(uni_f)}</div>',
                     unsafe_allow_html=True)
 
         filtered = fw[(fw["universe"] == uni_f) & (fw["method"] == meth_f)]
-        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview = filtered.head(100).copy().reset_index(drop=True)
         preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
         if "weight" in preview.columns:
             preview["weight"] = preview["weight"].apply(lambda x: f"{x*100:.2f}%")
         st.markdown(
-            styled_html_table(preview, universe_col="universe"),
+            styled_html_table(preview, ticker_col="ticker", universe_col="universe",
+                              max_height=450, compact=True),
             unsafe_allow_html=True)
-        if len(filtered) > 200:
-            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
-        st.download_button("Download CSV", filtered.to_csv(index=False),
+        st.caption(f"Showing first 100 of {len(filtered):,} rows.")
+        st.download_button("Download Full CSV", filtered.to_csv(index=False),
                            "fund_weights.csv", "text/csv")
 
     elif data_tab == "Performance Metrics":
@@ -1140,17 +1049,16 @@ elif page == "Data Explorer":
             unsafe_allow_html=True)
 
         show_pm = pm.copy().reset_index(drop=True)
-        # Format numeric columns for display
         for c in ["ann_return", "ann_vol", "max_drawdown", "total_return"]:
             if c in show_pm.columns:
                 show_pm[c] = show_pm[c].apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
         for c in ["var_95", "es_95"]:
             if c in show_pm.columns:
                 show_pm[c] = show_pm[c].apply(lambda x: f"{x*100:.2f}%" if pd.notna(x) else "—")
-
         st.markdown(
             styled_html_table(show_pm, highlight_col="sharpe", highlight_max=True,
-                              universe_col="universe", fmt2_cols=["sharpe", "sortino"]),
+                              universe_col="universe", fmt2_cols=["sharpe", "sortino"],
+                              max_height=500),
             unsafe_allow_html=True)
         st.download_button("Download CSV", pm.to_csv(index=False),
                            "performance_metrics.csv", "text/csv")
@@ -1159,24 +1067,22 @@ elif page == "Data Explorer":
         si = load_sector_sentiment()
         st.markdown(
             '<div class="section-title">Sector Sentiment</div>'
-            '<div class="section-subtitle">Daily sector-level Fear & Greed index '
-            f'derived from scored headlines. <strong>{len(si):,} rows</strong>.</div>',
+            '<div class="section-subtitle">Daily sector-level Fear & Greed index. '
+            f'<strong>{len(si):,} rows</strong>.</div>',
             unsafe_allow_html=True)
-
         sector_f = st.multiselect("Sector", si["sector"].unique(),
                                   default=list(si["sector"].unique()), key="si_sec")
         filtered = si[si["sector"].isin(sector_f)]
-        preview = filtered.head(200).copy().reset_index(drop=True)
+        preview = filtered.head(100).copy().reset_index(drop=True)
         preview["date"] = preview["date"].dt.strftime("%Y-%m-%d")
         for c in ["sentiment", "fear_greed", "sentiment_lagged"]:
             if c in preview.columns:
                 preview[c] = preview[c].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "—")
         st.markdown(
-            styled_html_table(preview, sector_col="sector"),
+            styled_html_table(preview, sector_col="sector", max_height=450),
             unsafe_allow_html=True)
-        if len(filtered) > 200:
-            st.caption(f"Showing first 200 of {len(filtered):,} rows. Download for the full dataset.")
-        st.download_button("Download CSV", filtered.to_csv(index=False),
+        st.caption(f"Showing first 100 of {len(filtered):,} rows.")
+        st.download_button("Download Full CSV", filtered.to_csv(index=False),
                            "sector_sentiment.csv", "text/csv")
 
     elif data_tab == "Headlines":
@@ -1184,11 +1090,9 @@ elif page == "Data Explorer":
         if hl is not None:
             st.markdown(
                 '<div class="section-title">Headlines</div>'
-                '<div class="section-subtitle">Raw news headlines scored by the finVADER '
-                f'sentiment model across 50 equities and 10 sectors. '
-                f'<strong>{len(hl):,} rows</strong>.</div>',
+                '<div class="section-subtitle">News headlines scored by finVADER across '
+                f'50 equities and 10 sectors. <strong>{len(hl):,} rows</strong>.</div>',
                 unsafe_allow_html=True)
-
             col1, col2 = st.columns(2)
             with col1:
                 sec_f = st.selectbox("Sector",
@@ -1198,14 +1102,13 @@ elif page == "Data Explorer":
                 tick_f = st.selectbox("Ticker",
                                      ["All"] + sorted(hl["ticker"].dropna().unique()),
                                      key="hl_de_tick")
-
             filtered = hl.copy()
             if sec_f != "All":
                 filtered = filtered[filtered["sector"] == sec_f]
             if tick_f != "All":
                 filtered = filtered[filtered["ticker"] == tick_f]
 
-            preview = filtered.head(200).copy().reset_index(drop=True)
+            preview = filtered.head(100).copy().reset_index(drop=True)
             show_cols = ["trading_date", "ticker", "sector", "title"]
             if "publisher" in preview.columns:
                 show_cols.append("publisher")
@@ -1213,14 +1116,14 @@ elif page == "Data Explorer":
             preview["trading_date"] = preview["trading_date"].dt.strftime("%Y-%m-%d")
             preview.columns = ["Date", "Ticker", "Sector", "Headline"] + (
                 ["Publisher"] if "publisher" in show_cols else [])
-
             st.markdown(
-                styled_html_table(preview, sector_col="Sector"),
+                styled_html_table(preview, ticker_col="Ticker", sector_col="Sector",
+                                  max_height=500),
                 unsafe_allow_html=True)
-            st.caption(f"Showing first 200 of {len(filtered):,} matching headlines.")
+            st.caption(f"Showing first 100 of {len(filtered):,} matching headlines.")
         else:
             st.info(
                 "Headline data is not available in this deployment. "
                 "The headline_panel.csv (28 MB) is too large for the GitHub repo. "
-                "Run the app locally to browse individual headlines."
+                "Run locally to browse individual headlines."
             )
